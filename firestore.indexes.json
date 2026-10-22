@@ -1,0 +1,36 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "monitors",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "paused", "order": "ASCENDING" },
+        { "fieldPath": "nextCheckAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "incidents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "monitorId", "order": "ASCENDING" },
+        { "fieldPath": "startedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "incidents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ownerUid", "order": "ASCENDING" },
+        { "fieldPath": "startedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "checks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ts", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if the caller is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if the caller owns the resource
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // CRITICAL: Browser / Client writes are disabled across all collections.
+    // All writes must originate from the trusted Go backend via Firebase Admin SDK.
+    match /{document=**} {
+      allow write: if false;
+    }
+
+    // Monitors: Owner can read their own monitors
+    match /monitors/{monitorId} {
+      allow read: if isOwner(resource.data.ownerUid);
+
+      // Checks subcollection: Failures read-only by owner
+      match /checks/{checkId} {
+        allow read: if isOwner(get(/databases/$(database)/documents/monitors/$(monitorId)).data.ownerUid);
+      }
+
+      // Rollups subcollection: Hourly metrics read-only by owner
+      match /rollups/{hourId} {
+        allow read: if isOwner(get(/databases/$(database)/documents/monitors/$(monitorId)).data.ownerUid);
+      }
+    }
+
+    // Incidents: Owner can read their monitor incidents
+    match /incidents/{incidentId} {
+      allow read: if isOwner(resource.data.ownerUid);
+    }
+
+    // Status Pages: Anyone can read if public; owner can read anytime
+    match /statusPages/{slug} {
+      allow read: if resource.data.public == true || isOwner(resource.data.ownerUid);
+    }
+  }
+}

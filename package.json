@@ -1,0 +1,22 @@
+{
+  "name": "pulse-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Developer uptime and heartbeat monitoring service",
+  "scripts": {
+    "dev": "concurrently -n \"api,worker,web\" -c \"blue,magenta,cyan\" \"npm run dev:api\" \"npm run dev:worker\" \"npm run dev:web\"",
+    "dev:api": "node scripts/run-api.js",
+    "dev:worker": "node scripts/run-worker.js",
+    "dev:web": "npm --prefix apps/web run dev",
+    "build:web": "npm --prefix apps/web run build",
+    "lint:web": "npm --prefix apps/web run lint",
+    "lint:api": "node scripts/lint-api.js",
+    "lint": "npm run lint:api && npm run lint:web",
+    "test:api": "node scripts/test-api.js",
+    "test:web": "npm --prefix apps/web test --if-present",
+    "test": "npm run test:api && npm run test:web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.5"
+  }
+}
