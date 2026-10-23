@@ -191,12 +191,12 @@ function StatusPageContent() {
           </div>
 
           <div className="space-y-3">
-            {data.monitors.length === 0 ? (
+            {(data.monitors || []).length === 0 ? (
               <div className="p-8 text-center rounded-2xl bg-[var(--bg-panel)] border border-[var(--border-subtle)] text-[var(--text-secondary)] text-xs">
                 No active monitors configured for this status page.
               </div>
             ) : (
-              data.monitors.map((mon) => {
+              (data.monitors || []).map((mon) => {
                 const isMonUp = mon.state === "up";
                 const isMonDown = mon.state === "down";
 
@@ -262,13 +262,13 @@ function StatusPageContent() {
           <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Past Incidents</h3>
 
           <div className="space-y-3">
-            {data.incidents.length === 0 ? (
+            {(data.incidents || []).length === 0 ? (
               <div className="p-8 text-center rounded-2xl bg-[var(--bg-panel)] border border-dashed border-[var(--border-subtle)] text-[var(--text-secondary)] text-xs flex flex-col items-center justify-center">
                 <ShieldCheck className="h-6 w-6 text-emerald-500/70 mb-2" />
                 <span>No incidents reported in the last 30 days. All systems operating smoothly.</span>
               </div>
             ) : (
-              data.incidents.map((inc) => (
+              (data.incidents || []).map((inc) => (
                 <div
                   key={inc.id}
                   className="p-4 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"

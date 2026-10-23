@@ -114,13 +114,13 @@ export default function MonitorsPage() {
     try {
       setError(null);
       const [monData, incData, spData] = await Promise.all([
-        api.getMonitors(token),
+        api.getMonitors(token).catch(() => []),
         api.getIncidents(token).catch(() => []),
         api.getStatusPages(token).catch(() => []),
       ]);
-      setMonitors(monData);
-      setIncidents(incData);
-      setStatusPages(spData);
+      setMonitors(Array.isArray(monData) ? monData : []);
+      setIncidents(Array.isArray(incData) ? incData : []);
+      setStatusPages(Array.isArray(spData) ? spData : []);
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : "Failed to load dashboard data";
@@ -273,20 +273,22 @@ export default function MonitorsPage() {
 
   // Summary counts
   const summary = useMemo(() => {
-    const up = monitors.filter((m) => !m.paused && m.state === "up").length;
-    const down = monitors.filter((m) => !m.paused && m.state === "down").length;
-    const late = monitors.filter(
+    const monList = monitors || [];
+    const incList = incidents || [];
+    const up = monList.filter((m) => !m.paused && m.state === "up").length;
+    const down = monList.filter((m) => !m.paused && m.state === "down").length;
+    const late = monList.filter(
       (m) => !m.paused && m.type === "heartbeat" && m.state === "down"
     ).length;
-    const paused = monitors.filter((m) => m.paused).length;
-    const openIncidents = incidents.filter((inc) => !inc.resolvedAt).length;
+    const paused = monList.filter((m) => m.paused).length;
+    const openIncidents = incList.filter((inc) => !inc.resolvedAt).length;
 
     return { up, down, late, paused, openIncidents };
   }, [monitors, incidents]);
 
   // Filtered monitors list
   const filteredMonitors = useMemo(() => {
-    return monitors.filter((m) => {
+    return (monitors || []).filter((m) => {
       // Search
       const matchesSearch =
         m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -393,7 +395,7 @@ export default function MonitorsPage() {
                     : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 }`}
               >
-                Monitors ({monitors.length})
+                Monitors ({(monitors || []).length})
               </button>
 
               <button
@@ -422,7 +424,7 @@ export default function MonitorsPage() {
                     : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 }`}
               >
-                Status pages ({statusPages.length})
+                Status pages ({(statusPages || []).length})
               </button>
             </nav>
           </div>
@@ -519,7 +521,7 @@ export default function MonitorsPage() {
         {activeTab === "monitors" && (
           <section aria-labelledby="monitors-table-heading" className="space-y-4">
             {/* Search and Filters */}
-            {monitors.length > 0 && (
+            {(monitors || []).length > 0 && (
               <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
                 <div className="relative flex-1 max-w-sm">
                   <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" />
@@ -554,7 +556,7 @@ export default function MonitorsPage() {
             {loading ? (
               <TableSkeleton rows={5} />
             ) : filteredMonitors.length === 0 ? (
-              monitors.length === 0 ? (
+              (monitors || []).length === 0 ? (
                 <EmptyState
                   icon={<Globe className="w-6 h-6" />}
                   title="No monitors yet"
@@ -731,7 +733,7 @@ export default function MonitorsPage() {
               All incidents
             </h2>
 
-            {incidents.length === 0 ? (
+            {(incidents || []).length === 0 ? (
               <EmptyState
                 icon={<CheckCircle2 className="w-6 h-6 text-[var(--status-up)]" />}
                 title="Zero active incidents"
@@ -739,7 +741,7 @@ export default function MonitorsPage() {
               />
             ) : (
               <div className="space-y-3">
-                {incidents.map((inc) => (
+                {(incidents || []).map((inc) => (
                   <div
                     key={inc.id}
                     className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
@@ -793,7 +795,7 @@ export default function MonitorsPage() {
               Public status pages
             </h2>
 
-            {statusPages.length === 0 ? (
+            {(statusPages || []).length === 0 ? (
               <EmptyState
                 icon={<Globe className="w-6 h-6" />}
                 title="No status pages created"
@@ -803,7 +805,7 @@ export default function MonitorsPage() {
               />
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {statusPages.map((sp) => (
+                {(statusPages || []).map((sp) => (
                   <div
                     key={sp.id}
                     className="p-5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] space-y-3"
@@ -829,7 +831,7 @@ export default function MonitorsPage() {
 
                     <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-xs font-mono">
                       <span className="text-[var(--text-secondary)]">
-                        {sp.monitorIds.length} monitors
+                        {(sp.monitorIds || []).length} monitors
                       </span>
                       <Link
                         href={`/status/${sp.slug}`}
@@ -950,7 +952,7 @@ export default function MonitorsPage() {
                   Included monitors ({spSelectedMonitors.length} selected)
                 </label>
                 <div className="max-h-40 overflow-y-auto space-y-1 border border-[var(--border-subtle)] rounded-lg p-2 bg-[var(--bg-page)]">
-                  {monitors.map((m) => {
+                  {(monitors || []).map((m) => {
                     const isChecked = spSelectedMonitors.includes(m.id);
                     return (
                       <label
@@ -1032,15 +1034,15 @@ export default function MonitorsPage() {
             {/* Existing Channels */}
             <div className="space-y-2">
               <span className="text-xs font-semibold text-[var(--text-primary)]">
-                Active webhooks ({selectedMonitorForAlerts.alertChannels.length})
+                Active webhooks ({(selectedMonitorForAlerts.alertChannels || []).length})
               </span>
-              {selectedMonitorForAlerts.alertChannels.length === 0 ? (
+              {(selectedMonitorForAlerts.alertChannels || []).length === 0 ? (
                 <p className="text-xs text-[var(--text-secondary)] italic">
                   No alert channels configured yet.
                 </p>
               ) : (
                 <div className="space-y-1.5">
-                  {selectedMonitorForAlerts.alertChannels.map((ch, idx) => (
+                  {(selectedMonitorForAlerts.alertChannels || []).map((ch, idx) => (
                     <div
                       key={idx}
                       className="p-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-page)] flex items-center justify-between text-xs"

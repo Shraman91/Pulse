@@ -67,7 +67,11 @@ function MonitorDetailContent() {
         api.getIncidents(token).catch(() => []),
       ]);
       setMonitor(monData);
-      setIncidents(allIncidents.filter((inc) => inc.monitorId === id));
+      setIncidents(
+        (Array.isArray(allIncidents) ? allIncidents : []).filter(
+          (inc) => inc.monitorId === id
+        )
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to load monitor";
       setError(msg);
@@ -557,13 +561,13 @@ function MonitorDetailContent() {
               Recent incidents
             </h2>
             <span className="text-xs font-mono text-[var(--text-secondary)]">
-              {incidents.length} recorded
+              {(incidents || []).length} recorded
             </span>
           </div>
 
-          {incidents.length > 0 ? (
+          {(incidents || []).length > 0 ? (
             <div className="space-y-3">
-              {incidents.map((inc) => (
+              {(incidents || []).map((inc) => (
                 <div
                   key={inc.id}
                   className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"

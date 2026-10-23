@@ -174,7 +174,8 @@ export interface UpdateStatusPagePayload {
 
 export const api = {
   getMonitors: async (token: string): Promise<Monitor[]> => {
-    return fetchWithAuth("/api/monitors", token);
+    const data = await fetchWithAuth("/api/monitors", token);
+    return Array.isArray(data) ? data : [];
   },
 
   getMonitor: async (token: string, id: string): Promise<Monitor> => {
@@ -202,7 +203,8 @@ export const api = {
   },
 
   getIncidents: async (token: string): Promise<Incident[]> => {
-    return fetchWithAuth("/api/incidents", token);
+    const data = await fetchWithAuth("/api/incidents", token);
+    return Array.isArray(data) ? data : [];
   },
 
   getMonitorStats: async (token: string, id: string, range = "24h"): Promise<MonitorStats> => {
@@ -233,12 +235,18 @@ export const api = {
       } catch {}
       throw new Error(errMessage);
     }
-    return res.json();
+    const pageData = await res.json();
+    return {
+      ...pageData,
+      monitors: Array.isArray(pageData?.monitors) ? pageData.monitors : [],
+      incidents: Array.isArray(pageData?.incidents) ? pageData.incidents : [],
+    };
   },
 
   // Authenticated status page management
   getStatusPages: async (token: string): Promise<StatusPage[]> => {
-    return fetchWithAuth("/api/status-pages", token);
+    const data = await fetchWithAuth("/api/status-pages", token);
+    return Array.isArray(data) ? data : [];
   },
 
   createStatusPage: async (token: string, payload: CreateStatusPagePayload): Promise<StatusPage> => {
