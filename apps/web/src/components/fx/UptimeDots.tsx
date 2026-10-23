@@ -23,9 +23,14 @@ interface DayStats {
   avgLatencyMs: number;
 }
 
+let cachedClientDate = "2026-10-23T12:00:00Z";
+
 function getClientDateSnapshot(): string {
   if (typeof window === "undefined") return "2026-10-23T12:00:00Z";
-  return new Date().toISOString();
+  if (cachedClientDate === "2026-10-23T12:00:00Z") {
+    cachedClientDate = new Date().toISOString();
+  }
+  return cachedClientDate;
 }
 
 function subscribeDate() {

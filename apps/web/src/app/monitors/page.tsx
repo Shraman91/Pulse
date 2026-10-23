@@ -35,13 +35,21 @@ import { TableSkeleton } from "@/components/ui/LoadingSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { MonitorForm } from "@/components/monitors/MonitorForm";
 
+let cachedNow = 0;
+
 function getNowSnapshot(): number {
   if (typeof window === "undefined") return 0;
-  return Date.now();
+  if (!cachedNow) {
+    cachedNow = Date.now();
+  }
+  return cachedNow;
 }
 
 function subscribeNow(callback: () => void) {
-  const timer = setInterval(callback, 5000);
+  const timer = setInterval(() => {
+    cachedNow = Date.now();
+    callback();
+  }, 5000);
   return () => clearInterval(timer);
 }
 

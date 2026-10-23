@@ -28,8 +28,14 @@ function checkWebGLSupport(): boolean {
   }
 }
 
+let cachedWebGL: boolean | null = null;
+
 function getWebGLSnapshot(): boolean {
-  return checkWebGLSupport();
+  if (typeof window === "undefined") return false;
+  if (cachedWebGL === null) {
+    cachedWebGL = checkWebGLSupport();
+  }
+  return cachedWebGL;
 }
 
 function subscribeNoop() {
