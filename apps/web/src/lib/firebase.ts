@@ -1,13 +1,18 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, GithubAuthProvider } from "firebase/auth";
 
+function cleanEnv(val: string | undefined): string | undefined {
+  if (!val) return undefined;
+  return val.replace(/^["']|["']$/g, "").trim();
+}
+
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyMockKeyForDevOnly12345",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "pulse-dev.firebaseapp.com",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "pulse-dev",
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "pulse-dev.appspot.com",
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "1234567890",
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:1234567890:web:abcdef123456",
+  apiKey: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_API_KEY) || "AIzaSyMockKeyForDevOnly12345",
+  authDomain: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN) || "pulse-dev.firebaseapp.com",
+  projectId: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) || "pulse-dev",
+  storageBucket: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET) || "pulse-dev.appspot.com",
+  messagingSenderId: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID) || "1234567890",
+  appId: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_APP_ID) || "1:1234567890:web:abcdef123456",
 };
 
 // Initialize Firebase only on client or if not already initialized
