@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useTheme } from "@/context/ThemeContext";
+import { KineticHeading } from "@/components/fx/KineticHeading";
+import { Marquee } from "@/components/fx/Marquee";
 
 export default function DesignSystemPage() {
   const { resolvedTheme } = useTheme();
@@ -221,6 +223,50 @@ export default function DesignSystemPage() {
               <span className="text-xs text-[var(--text-secondary)]">
                 Sentence case everywhere. No ALL-CAPS eyebrows, no tracked-out caps labels, no spaced em dashes.
               </span>
+            </div>
+          </div>
+        </section>
+
+        {/* Kinetic Typography (Phase F1) */}
+        <section aria-labelledby="kinetic-title" className="space-y-6">
+          <div className="border-b border-[var(--border-subtle)] pb-2 flex items-baseline justify-between">
+            <h2 id="kinetic-title" className="text-xl font-bold tracking-tight">
+              Kinetic typography &amp; marquee
+            </h2>
+            <span className="text-xs font-mono text-[var(--text-secondary)]">
+              Signature effects • Hero only
+            </span>
+          </div>
+
+          <div className="p-6 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] space-y-6">
+            <div>
+              <span className="text-xs font-mono text-[var(--text-secondary)] block mb-2">
+                KineticHeading • Hover letters or watch periodic ECG heartbeat pulse
+              </span>
+              <div className="p-4 rounded-lg bg-[var(--bg-page)] border border-[var(--border-subtle)]">
+                <KineticHeading
+                  text="Know the moment your service goes quiet."
+                  className="text-2xl sm:text-3xl font-bold"
+                />
+              </div>
+            </div>
+
+            <div>
+              <span className="text-xs font-mono text-[var(--text-secondary)] block mb-2">
+                Marquee • Responsive to scroll velocity and skew
+              </span>
+              <Marquee
+                items={[
+                  "Zero-trust SSRF guard",
+                  "Distributed lease workers",
+                  "httptrace latency breakdown",
+                  "Anti-flapping incidents",
+                  "Dead man's switch cron",
+                  "Discord Slack Telegram alerts",
+                  "Public status pages",
+                ]}
+                speed={35}
+              />
             </div>
           </div>
         </section>
