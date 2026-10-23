@@ -48,3 +48,27 @@ func TestLoadCustomEnv(t *testing.T) {
 		t.Errorf("expected StoreType firestore, got %s", cfg.StoreType)
 	}
 }
+
+func TestLoadQuotedEnv(t *testing.T) {
+	os.Setenv("PORT", "\"9090\"")
+	os.Setenv("WORKER_CONCURRENCY", "'35'")
+	os.Setenv("FIRESTORE_PROJECT_ID", "\"pulse-prod\"")
+	defer func() {
+		os.Unsetenv("PORT")
+		os.Unsetenv("WORKER_CONCURRENCY")
+		os.Unsetenv("FIRESTORE_PROJECT_ID")
+	}()
+
+	cfg := Load()
+
+	if cfg.Port != "9090" {
+		t.Errorf("expected Port 9090 (stripped quotes), got %s", cfg.Port)
+	}
+	if cfg.WorkerConcurrency != 35 {
+		t.Errorf("expected WorkerConcurrency 35 (stripped quotes), got %d", cfg.WorkerConcurrency)
+	}
+	if cfg.FirestoreProjectID != "pulse-prod" {
+		t.Errorf("expected FirestoreProjectID pulse-prod (stripped quotes), got %s", cfg.FirestoreProjectID)
+	}
+}
+

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
 // Config holds all configuration variables for Pulse API and Worker.
@@ -35,14 +36,15 @@ func Load() *Config {
 
 func getEnv(key, defaultVal string) string {
 	if val, ok := os.LookupEnv(key); ok && val != "" {
-		return val
+		return strings.Trim(val, `"'`)
 	}
 	return defaultVal
 }
 
 func getEnvInt(key string, defaultVal int) int {
 	if val, ok := os.LookupEnv(key); ok && val != "" {
-		if parsed, err := strconv.Atoi(val); err == nil {
+		cleaned := strings.Trim(val, `"'`)
+		if parsed, err := strconv.Atoi(cleaned); err == nil {
 			return parsed
 		}
 	}
