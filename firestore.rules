@@ -39,7 +39,7 @@ service cloud.firestore {
 
     // Status Pages: Anyone can read if public; owner can read anytime
     match /statusPages/{slug} {
-      allow read: if resource.data.public == true || isOwner(resource.data.ownerUid);
+      allow read: if resource.data.isPublic == true || resource.data.public == true || isOwner(resource.data.ownerUid);
     }
   }
 }

@@ -1,0 +1,37 @@
+# syntax=docker/dockerfile:1
+
+# Build Stage
+FROM golang:1.24-alpine AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apk add --no-cache ca-certificates git
+
+# Cache dependencies
+COPY services/api/go.mod ./
+# If go.sum exists, copy it (ignore if missing)
+RUN if [ -f go.sum ]; then go mod download; fi
+
+# Copy source code
+COPY services/api/ ./
+
+# Build statically linked binary
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -extldflags '-static'" -o /bin/pulse-api ./cmd/api
+
+# Final Minimal Runtime Stage
+FROM alpine:3.21
+
+RUN apk --no-cache add ca-certificates tzdata
+
+# Create non-root user
+RUN addgroup -S pulse && adduser -S pulse -G pulse
+USER pulse
+
+COPY --from=builder --chown=pulse:pulse /bin/pulse-api /usr/local/bin/pulse-api
+
+ENV PORT=8080
+ENV PULSE_ENV=production
+EXPOSE 8080
+
+ENTRYPOINT ["/usr/local/bin/pulse-api"]
