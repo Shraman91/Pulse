@@ -322,6 +322,7 @@ func validateHeartbeatConfig(req CreateMonitorRequest, m *store.Monitor) error {
 	}
 
 	m.PingToken = generateSecureToken()
+	m.NextCheckAt = m.CreatedAt.Add(time.Duration(m.ExpectedEverySec+m.GraceSec) * time.Second)
 	return nil
 }
 

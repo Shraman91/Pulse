@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"pulse/internal/checker"
+	"pulse/internal/heartbeat"
+	"pulse/internal/incidents"
 	"pulse/internal/store"
 )
 
@@ -296,3 +298,159 @@ func TestCalculateNextCheckJitter(t *testing.T) {
 		}
 	}
 }
+
+func TestEvaluateHeartbeat(t *testing.T) {
+	now := time.Now().UTC()
+
+	t.Run("heartbeat within window is not expired", func(t *testing.T) {
+		lastPing := now.Add(-30 * time.Second)
+		m := &store.Monitor{
+			Type:             store.MonitorTypeHeartbeat,
+			ExpectedEverySec: 60,
+			GraceSec:         15,
+			LastPingAt:       &lastPing,
+		}
+
+		isExpired, _, nextCheck := EvaluateHeartbeat(m, now)
+		if isExpired {
+			t.Error("expected heartbeat to be active, got expired")
+		}
+		expectedDeadline := lastPing.Add(75 * time.Second)
+		if !nextCheck.Equal(expectedDeadline) {
+			t.Errorf("expected deadline %v, got %v", expectedDeadline, nextCheck)
+		}
+	})
+
+	t.Run("heartbeat past deadline is expired", func(t *testing.T) {
+		lastPing := now.Add(-100 * time.Second)
+		m := &store.Monitor{
+			Type:             store.MonitorTypeHeartbeat,
+			ExpectedEverySec: 60,
+			GraceSec:         15,
+			LastPingAt:       &lastPing,
+		}
+
+		isExpired, cause, _ := EvaluateHeartbeat(m, now)
+		if !isExpired {
+			t.Error("expected heartbeat to be expired, got active")
+		}
+		if cause == "" {
+			t.Error("expected descriptive cause for expired heartbeat")
+		}
+	})
+}
+
+func TestSchedulerHeartbeatWorkflow(t *testing.T) {
+	st := store.NewMemoryStore()
+	chk := checker.NewChecker(checker.WithAllowPrivateIPs(true))
+
+	var alertsReceived []*incidents.AlertEvent
+	var mu sync.Mutex
+	alertHandler := func(ctx context.Context, event *incidents.AlertEvent) {
+		mu.Lock()
+		alertsReceived = append(alertsReceived, event)
+		mu.Unlock()
+	}
+
+	sm := incidents.NewStateMachine(st, incidents.RealClock{}, alertHandler)
+	hbHandler := heartbeat.NewHandler(st, sm)
+
+	sched := New(st, chk,
+		WithWorkers(2),
+		WithTickInterval(10*time.Millisecond),
+		WithStateMachine(sm),
+	)
+
+	now := time.Now().UTC()
+	lastPing := now.Add(-120 * time.Second)
+
+	// Seed expired heartbeat monitor
+	m := &store.Monitor{
+		ID:               "mon_cron_backup",
+		OwnerUID:         "user_cron",
+		Name:             "Database Backup Cron",
+		Type:             store.MonitorTypeHeartbeat,
+		State:            store.StateUnknown,
+		PingToken:        "token_cron_123",
+		ExpectedEverySec: 60,
+		GraceSec:         10,
+		LastPingAt:       &lastPing,
+		NextCheckAt:      now.Add(-1 * time.Second), // due for evaluation
+		CreatedAt:        lastPing,
+		UpdatedAt:        lastPing,
+	}
+	if err := st.CreateMonitor(context.Background(), m); err != nil {
+		t.Fatalf("failed to create monitor: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// 1. Scheduler discovers expired heartbeat and transitions to DOWN
+	dispatched := sched.PollDueMonitors(ctx)
+	if dispatched != 1 {
+		t.Fatalf("expected 1 monitor dispatched, got %d", dispatched)
+	}
+
+	// Drain worker
+	sched.wg.Add(1)
+	go func() {
+		defer sched.wg.Done()
+		mLeased := <-sched.jobChan
+		sched.executeCheck(ctx, mLeased)
+	}()
+	sched.wg.Wait()
+
+	// Verify state is DOWN in store
+	updated, err := st.GetMonitor(ctx, "mon_cron_backup")
+	if err != nil {
+		t.Fatalf("failed to get monitor: %v", err)
+	}
+	if updated.State != store.StateDown {
+		t.Fatalf("expected monitor state 'down', got '%s'", updated.State)
+	}
+
+	// Verify active incident created
+	activeInc, err := st.GetActiveIncident(ctx, "mon_cron_backup")
+	if err != nil || activeInc == nil {
+		t.Fatalf("expected active incident to be created, got %v", err)
+	}
+
+	// Verify DOWN alert received
+	mu.Lock()
+	if len(alertsReceived) != 1 || alertsReceived[0].Type != incidents.EventDown {
+		t.Fatalf("expected exactly 1 EventDown alert, got %v", alertsReceived)
+	}
+	mu.Unlock()
+
+	// 2. Cron job recovers by pinging /ping/{token}
+	pingMux := http.NewServeMux()
+	pingMux.HandleFunc("/ping/{token}", hbHandler.Ping)
+	req := httptest.NewRequest(http.MethodGet, "/ping/token_cron_123", nil)
+	rec := httptest.NewRecorder()
+	pingMux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 from ping endpoint, got %d", rec.Code)
+	}
+
+	// Verify monitor state is UP in store
+	recovered, _ := st.GetMonitor(ctx, "mon_cron_backup")
+	if recovered.State != store.StateUp {
+		t.Fatalf("expected monitor state 'up' after ping, got '%s'", recovered.State)
+	}
+
+	// Verify active incident is resolved
+	activeIncAfterPing, _ := st.GetActiveIncident(ctx, "mon_cron_backup")
+	if activeIncAfterPing != nil {
+		t.Fatalf("expected active incident to be resolved, got %v", activeIncAfterPing)
+	}
+
+	// Verify UP recovery alert dispatched
+	mu.Lock()
+	if len(alertsReceived) != 2 || alertsReceived[1].Type != incidents.EventRecovery {
+		t.Fatalf("expected 2nd alert to be EventRecovery, got %v", alertsReceived)
+	}
+	mu.Unlock()
+}
+

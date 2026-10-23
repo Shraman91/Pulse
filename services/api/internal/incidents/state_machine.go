@@ -173,6 +173,107 @@ func (sm *StateMachine) ProcessCheckResult(
 	return m, alertEvent, nil
 }
 
+// ProcessHeartbeatTimeout marks a heartbeat monitor DOWN when its grace period has elapsed.
+// Opens an Incident, transitions monitor to DOWN, and dispatches a DOWN alert.
+func (sm *StateMachine) ProcessHeartbeatTimeout(
+	ctx context.Context,
+	m *store.Monitor,
+	cause string,
+	nextCheckAt time.Time,
+) (*store.Monitor, *AlertEvent, error) {
+	now := sm.clock.Now()
+	previousState := m.State
+
+	var alertEvent *AlertEvent
+
+	if previousState != store.StateDown {
+		incident := &store.Incident{
+			ID:              generateID("inc"),
+			MonitorID:       m.ID,
+			MonitorName:     m.Name,
+			OwnerUID:        m.OwnerUID,
+			StartedAt:       now,
+			Cause:           cause,
+			AlertDispatched: true,
+		}
+
+		if err := sm.store.CreateIncident(ctx, incident); err != nil {
+			slog.Error("failed to create incident for heartbeat timeout", "monitorId", m.ID, "error", err)
+		}
+
+		alertEvent = &AlertEvent{
+			Type:      EventDown,
+			Monitor:   m,
+			Incident:  incident,
+			Cause:     cause,
+			Timestamp: now,
+		}
+	}
+
+	if err := sm.store.UpdateMonitorState(ctx, m.ID, store.StateDown, FailureThreshold, nextCheckAt); err != nil {
+		return nil, nil, fmt.Errorf("failed to update monitor state: %w", err)
+	}
+
+	m.State = store.StateDown
+	m.ConsecutiveFailures = FailureThreshold
+	m.NextCheckAt = nextCheckAt
+
+	failureDoc := &store.CheckFailure{
+		ID:         generateID("chk"),
+		MonitorID:  m.ID,
+		TS:         now,
+		OK:         false,
+		StatusCode: 0,
+		Error:      cause,
+	}
+	_ = sm.store.RecordCheckFailure(ctx, failureDoc)
+
+	if alertEvent != nil && sm.alertHandler != nil {
+		sm.alertHandler(ctx, alertEvent)
+	}
+
+	return m, alertEvent, nil
+}
+
+// ProcessHeartbeatRecovery resolves an active incident when a DOWN heartbeat monitor receives a ping.
+func (sm *StateMachine) ProcessHeartbeatRecovery(
+	ctx context.Context,
+	m *store.Monitor,
+	now time.Time,
+) (*store.Monitor, *AlertEvent, error) {
+	if m.State != store.StateDown {
+		return m, nil, nil
+	}
+
+	activeInc, err := sm.store.GetActiveIncident(ctx, m.ID)
+	var alertEvent *AlertEvent
+
+	if err == nil && activeInc != nil {
+		if resolveErr := sm.store.ResolveIncident(ctx, activeInc.ID, now); resolveErr != nil {
+			slog.Error("failed to resolve incident on heartbeat ping", "incidentId", activeInc.ID, "error", resolveErr)
+		}
+		activeInc.ResolvedAt = &now
+		duration := now.Sub(activeInc.StartedAt)
+
+		alertEvent = &AlertEvent{
+			Type:      EventRecovery,
+			Monitor:   m,
+			Incident:  activeInc,
+			Duration:  duration,
+			Timestamp: now,
+		}
+	}
+
+	m.State = store.StateUp
+	m.ConsecutiveFailures = 0
+
+	if alertEvent != nil && sm.alertHandler != nil {
+		sm.alertHandler(ctx, alertEvent)
+	}
+
+	return m, alertEvent, nil
+}
+
 func generateID(prefix string) string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)

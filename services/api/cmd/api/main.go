@@ -14,7 +14,9 @@ import (
 	"pulse/internal/alerts"
 	"pulse/internal/auth"
 	"pulse/internal/config"
+	"pulse/internal/heartbeat"
 	"pulse/internal/httpx"
+	"pulse/internal/incidents"
 	"pulse/internal/monitors"
 	"pulse/internal/store"
 )
@@ -44,10 +46,13 @@ func main() {
 	authMw := auth.Middleware(verifier)
 
 	// Handler initialization
-	monitorsHandler := monitors.NewHandler(st)
 	alertsDispatcher := alerts.NewDispatcher(nil, cfg.TelegramBotToken, 2, 50, alerts.DefaultRetryConfig)
 	defer alertsDispatcher.Close()
 	alertsHandler := alerts.NewHandler(alertsDispatcher)
+
+	stateMachine := incidents.NewStateMachine(st, incidents.RealClock{}, alertsDispatcher.Dispatch)
+	monitorsHandler := monitors.NewHandler(st)
+	heartbeatHandler := heartbeat.NewHandler(st, stateMachine)
 
 	mux := http.NewServeMux()
 
@@ -59,6 +64,7 @@ func main() {
 			"time":    time.Now().UTC().Format(time.RFC3339),
 		})
 	})
+	mux.HandleFunc("/ping/{token}", heartbeatHandler.Ping)
 
 	// Protected monitor CRUD & incident routes
 	mux.Handle("POST /api/monitors", authMw(http.HandlerFunc(monitorsHandler.Create)))

@@ -592,6 +592,18 @@ export default function MonitorsPage() {
                               </button>
                             </div>
                             <div className="text-[11px] font-mono text-zinc-500 truncate">{pingUrl}</div>
+                            <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400/80 mt-2 pt-2 border-t border-zinc-800/40">
+                              <span>
+                                {m.lastPingAt
+                                  ? `Last Ping: ${new Date(m.lastPingAt).toLocaleTimeString()}`
+                                  : "Waiting for initial ping"}
+                              </span>
+                              <span className="text-zinc-500">
+                                {m.lastPingAt
+                                  ? new Date(m.lastPingAt).toLocaleDateString()
+                                  : "Never pinged"}
+                              </span>
+                            </div>
                           </div>
                         )}
 

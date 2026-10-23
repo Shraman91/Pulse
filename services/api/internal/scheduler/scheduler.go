@@ -206,22 +206,21 @@ func (s *Scheduler) executeCheck(ctx context.Context, m *store.Monitor) {
 			slog.Error("error running check", "monitorId", m.ID, "error", err)
 			return
 		}
-	} else {
-		// Heartbeat monitors are checked via timeout evaluation (Phase 6)
-		return
-	}
 
-	// Calculate nextCheckAt with +/- 5% random jitter
-	nextCheckAt := CalculateNextCheck(now, m.IntervalSec)
+		// Calculate nextCheckAt with +/- 5% random jitter
+		nextCheckAt := CalculateNextCheck(now, m.IntervalSec)
 
-	// Process result through anti-flapping state machine (opens/resolves incidents & records failures)
-	if _, _, processErr := s.stateMachine.ProcessCheckResult(ctx, m, result, nextCheckAt); processErr != nil {
-		slog.Error("failed to process check result", "monitorId", m.ID, "error", processErr)
-	}
+		// Process result through anti-flapping state machine (opens/resolves incidents & records failures)
+		if _, _, processErr := s.stateMachine.ProcessCheckResult(ctx, m, result, nextCheckAt); processErr != nil {
+			slog.Error("failed to process check result", "monitorId", m.ID, "error", processErr)
+		}
 
-	// Invoke completion hook if registered
-	if s.onCheckCompleted != nil {
-		s.onCheckCompleted(m, result)
+		// Invoke completion hook if registered
+		if s.onCheckCompleted != nil {
+			s.onCheckCompleted(m, result)
+		}
+	} else if m.Type == store.MonitorTypeHeartbeat {
+		s.checkHeartbeat(ctx, m, now)
 	}
 }
 

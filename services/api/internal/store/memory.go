@@ -229,6 +229,11 @@ func (s *MemoryStore) RecordHeartbeatPing(ctx context.Context, id string, pingTi
 	m.LastPingAt = &pingTime
 	m.ConsecutiveFailures = 0
 	m.State = StateUp
+	window := m.ExpectedEverySec + m.GraceSec
+	if window < 60 {
+		window = 60
+	}
+	m.NextCheckAt = pingTime.Add(time.Duration(window) * time.Second)
 	m.UpdatedAt = time.Now().UTC()
 	return nil
 }
