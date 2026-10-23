@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import Link from "next/link";
 import {
   CheckCircle2,
@@ -9,17 +9,20 @@ import {
   Pause,
   HelpCircle,
   Activity,
+  Radio,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useTheme } from "@/context/ThemeContext";
 import { KineticHeading } from "@/components/fx/KineticHeading";
 import { Marquee } from "@/components/fx/Marquee";
+import { ParticleField, ParticleFieldHandle } from "@/components/fx/ParticleField";
 
 export default function DesignSystemPage() {
   const { resolvedTheme } = useTheme();
   const [sampleText, setSampleText] = useState("https://api.example.com/health");
   const [sampleType, setSampleType] = useState<"http" | "heartbeat">("http");
   const [sampleChecked, setSampleChecked] = useState(true);
+  const particleFieldRef = useRef<ParticleFieldHandle>(null);
 
   return (
     <div className="min-h-screen bg-[var(--bg-page)] text-[var(--text-primary)] transition-colors duration-200">
@@ -267,6 +270,44 @@ export default function DesignSystemPage() {
                 ]}
                 speed={35}
               />
+            </div>
+          </div>
+        </section>
+
+        {/* Particle Field (Phase F2) */}
+        <section aria-labelledby="particles-title" className="space-y-6">
+          <div className="border-b border-[var(--border-subtle)] pb-2 flex items-baseline justify-between">
+            <h2 id="particles-title" className="text-xl font-bold tracking-tight">
+              Drifting particle field
+            </h2>
+            <span className="text-xs font-mono text-[var(--text-secondary)]">
+              Canvas 2D • Proximity mesh • Pulse ripple
+            </span>
+          </div>
+
+          <div className="p-6 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] space-y-4">
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+              Desktop renders ~90 particles, mobile ~40. About 1 in 12 particles is tinted marigold with a warm proximity glow. Particles gently drift, connect with proximity lines, repel from cursor, and pause when tab is hidden or off-screen.
+            </p>
+
+            <div className="relative h-64 sm:h-80 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-page)] overflow-hidden shadow-inner">
+              <ParticleField ref={particleFieldRef} particleCount={70} />
+
+              <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center pointer-events-none">
+                <div className="px-4 py-2 rounded-xl bg-[var(--bg-panel)]/90 backdrop-blur-md border border-[var(--border-subtle)] shadow-sm pointer-events-auto flex flex-col sm:flex-row items-center gap-3">
+                  <span className="text-xs text-[var(--text-primary)] font-medium">
+                    Move cursor across canvas or trigger ripple
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => particleFieldRef.current?.pulse()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--aubergine-500)] text-[var(--silver-50)] text-xs font-semibold hover:bg-[var(--aubergine-700)] transition-colors focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                  >
+                    <Radio className="w-3.5 h-3.5 text-[var(--marigold-300)]" aria-hidden="true" />
+                    Trigger heartbeat pulse
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </section>
