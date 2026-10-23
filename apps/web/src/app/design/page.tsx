@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useMemo } from "react";
 import Link from "next/link";
 import {
   CheckCircle2,
@@ -10,12 +10,65 @@ import {
   HelpCircle,
   Activity,
   Radio,
+  Sparkles,
+  Calendar,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useTheme } from "@/context/ThemeContext";
 import { KineticHeading } from "@/components/fx/KineticHeading";
 import { Marquee } from "@/components/fx/Marquee";
 import { ParticleField, ParticleFieldHandle } from "@/components/fx/ParticleField";
+import { HalftoneHero } from "@/components/fx/HalftoneHero";
+import { HalftoneDivider } from "@/components/fx/HalftoneDivider";
+import { UptimeDots } from "@/components/fx/UptimeDots";
+import { RollupPoint } from "@/lib/api";
+
+function generateSampleRollups(
+  days: number,
+  incidentDays: number[] = [],
+  onlyRecentHours = 0
+): RollupPoint[] {
+  const points: RollupPoint[] = [];
+  const now = new Date("2026-10-23T12:00:00Z");
+
+  if (onlyRecentHours > 0) {
+    for (let h = 0; h < onlyRecentHours; h++) {
+      const ptDate = new Date(now.getTime() - h * 3600 * 1000);
+      points.push({
+        hour: ptDate.toISOString(),
+        checks: 60,
+        failures: 0,
+        avgLatencyMs: 34 + ((h * 3) % 8),
+        peakLatencyMs: 76,
+        dnsMs: 4,
+        connectMs: 8,
+        tlsMs: 12,
+        ttfbMs: 10,
+      });
+    }
+    return points;
+  }
+
+  for (let d = 0; d < days; d++) {
+    const isIncident = incidentDays.includes(d);
+    for (let h = 0; h < 24; h++) {
+      const ptDate = new Date(now.getTime() - (d * 24 + h) * 3600 * 1000);
+      const failures = isIncident && (h === 4 || h === 5) ? 32 : 0;
+      points.push({
+        hour: ptDate.toISOString(),
+        checks: 60,
+        failures,
+        avgLatencyMs: isIncident ? 385 : 36 + ((d * 5 + h * 7) % 11),
+        peakLatencyMs: isIncident ? 920 : 74,
+        dnsMs: 5,
+        connectMs: 8,
+        tlsMs: 11,
+        ttfbMs: 12,
+      });
+    }
+  }
+  return points;
+}
 
 export default function DesignSystemPage() {
   const { resolvedTheme } = useTheme();
@@ -23,6 +76,16 @@ export default function DesignSystemPage() {
   const [sampleType, setSampleType] = useState<"http" | "heartbeat">("http");
   const [sampleChecked, setSampleChecked] = useState(true);
   const particleFieldRef = useRef<ParticleFieldHandle>(null);
+
+  const sampleApiPoints = useMemo(() => generateSampleRollups(30, []), []);
+  const sampleIncidentPoints = useMemo(
+    () => generateSampleRollups(30, [4, 18]),
+    []
+  );
+  const sampleSparsePoints = useMemo(
+    () => generateSampleRollups(30, [], 4),
+    []
+  );
 
   return (
     <div className="min-h-screen bg-[var(--bg-page)] text-[var(--text-primary)] transition-colors duration-200">
@@ -307,6 +370,139 @@ export default function DesignSystemPage() {
                     Trigger heartbeat pulse
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Halftone Effects (Phase F3) */}
+        <section aria-labelledby="halftone-title" className="space-y-6">
+          <div className="border-b border-[var(--border-subtle)] pb-2 flex items-baseline justify-between">
+            <h2 id="halftone-title" className="text-xl font-bold tracking-tight">
+              Halftone matrix & dividers
+            </h2>
+            <span className="text-xs font-mono text-[var(--text-secondary)]">
+              WebGL Shader • CSS Radial Mask
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Halftone WebGL Canvas */}
+            <div className="p-6 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-[var(--accent-hint)]" />
+                  HalftoneHero WebGL fragment shader
+                </span>
+                <span className="text-[11px] font-mono text-[var(--text-secondary)]">
+                  ~10kB OGL
+                </span>
+              </div>
+              <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                Sinusoidal traveling wave converts coordinates into dynamic dots. Hovering nudges dot diameter and illuminates into marigold. Respects reduced-motion and provides CSS radial fallback.
+              </p>
+              <div className="relative h-56 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-page)] overflow-hidden shadow-inner">
+                <HalftoneHero />
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none p-4">
+                  <span className="px-3 py-1.5 rounded-lg bg-[var(--bg-panel)]/85 backdrop-blur-md border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-primary)] shadow-sm">
+                    Move cursor to inspect dot illumination
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Halftone CSS Dividers */}
+            <div className="p-6 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] space-y-4 flex flex-col justify-between">
+              <div>
+                <span className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5 text-[var(--accent-hint)]" />
+                  HalftoneDivider CSS section transitions
+                </span>
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed mt-2">
+                  Pure CSS radial-gradient dots masked with alpha gradients. Zero JavaScript overhead, accessible, lightweight.
+                </p>
+              </div>
+
+              <div className="space-y-4 pt-2">
+                <div className="space-y-1">
+                  <span className="text-[11px] font-mono text-[var(--text-secondary)]">
+                    Double-sided fade with hairline border:
+                  </span>
+                  <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-page)] p-2">
+                    <HalftoneDivider height="h-12" fade="both" hasBorder />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <span className="text-[11px] font-mono text-[var(--text-secondary)]">
+                    Top-tapered fade:
+                  </span>
+                  <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-page)] p-2">
+                    <HalftoneDivider height="h-10" fade="top" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* UptimeDots Real-Data Grid (Phase F3) */}
+        <section aria-labelledby="uptimedots-title" className="space-y-6">
+          <div className="border-b border-[var(--border-subtle)] pb-2 flex items-baseline justify-between">
+            <h2 id="uptimedots-title" className="text-xl font-bold tracking-tight">
+              30-day UptimeDots grid
+            </h2>
+            <span className="text-xs font-mono text-[var(--text-secondary)]">
+              SVG • RollupPoint data • Radius encodes uptime
+            </span>
+          </div>
+
+          <div className="p-6 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] space-y-6">
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+              Dot diameter communicates daily uptime percentage (radius = uptime % × max radius). Today is framed by an accent ring; incident days illuminate in crimson red. Keyboard accessible with full WCAG AA contrast and tooltips.
+            </p>
+
+            <div className="space-y-6">
+              {/* Scenario 1: Clean 100% Uptime */}
+              <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-page)] space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-[var(--status-up)]" />
+                    Production API (High Availability)
+                  </span>
+                  <span className="font-mono text-[11px] text-[var(--text-secondary)]">
+                    30 days • 43,200 checks
+                  </span>
+                </div>
+                <UptimeDots points={sampleApiPoints} />
+              </div>
+
+              {/* Scenario 2: Service with Incidents */}
+              <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-page)] space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                    <XCircle className="w-4 h-4 text-[var(--status-down)]" />
+                    Billing Webhook (2 Outage Days)
+                  </span>
+                  <span className="font-mono text-[11px] text-[var(--status-down)]">
+                    2 incident days
+                  </span>
+                </div>
+                <UptimeDots points={sampleIncidentPoints} />
+              </div>
+
+              {/* Scenario 3: Newly Added Monitor / Sparse Data */}
+              <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-page)] space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-[var(--accent-hint)]" />
+                    Daily Database Backup Cron (Newly Added, 4h of history)
+                  </span>
+                  <span className="font-mono text-[11px] text-[var(--text-secondary)]">
+                    Sparse history safe
+                  </span>
+                </div>
+                <UptimeDots points={sampleSparsePoints} />
               </div>
             </div>
           </div>
