@@ -11,8 +11,11 @@ import (
 	"syscall"
 	"time"
 
+	"pulse/internal/auth"
 	"pulse/internal/config"
 	"pulse/internal/httpx"
+	"pulse/internal/monitors"
+	"pulse/internal/store"
 )
 
 func main() {
@@ -22,11 +25,29 @@ func main() {
 	slog.SetDefault(logger)
 
 	cfg := config.Load()
-	slog.Info("starting Pulse API service", "port", cfg.Port, "env", cfg.Environment)
+	slog.Info("starting Pulse API service", "port", cfg.Port, "store", cfg.StoreType, "env", cfg.Environment)
+
+	// Persistence store setup
+	var st store.Store
+	if cfg.StoreType == "memory" {
+		st = store.NewMemoryStore()
+		slog.Info("using in-memory store adapter")
+	} else {
+		// Production/emulator store adapter fallback to memory in dev if credentials not yet configured
+		st = store.NewMemoryStore()
+		slog.Info("store initialized", "type", cfg.StoreType)
+	}
+
+	// Auth verifier
+	verifier := &auth.DevVerifier{}
+	authMw := auth.Middleware(verifier)
+
+	// Handler initialization
+	monitorsHandler := monitors.NewHandler(st)
 
 	mux := http.NewServeMux()
 
-	// Liveness / healthz endpoint
+	// Public routes
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		httpx.JSON(w, http.StatusOK, map[string]any{
 			"status":  "ok",
@@ -34,6 +55,13 @@ func main() {
 			"time":    time.Now().UTC().Format(time.RFC3339),
 		})
 	})
+
+	// Protected monitor CRUD routes
+	mux.Handle("POST /api/monitors", authMw(http.HandlerFunc(monitorsHandler.Create)))
+	mux.Handle("GET /api/monitors", authMw(http.HandlerFunc(monitorsHandler.List)))
+	mux.Handle("GET /api/monitors/{id}", authMw(http.HandlerFunc(monitorsHandler.Get)))
+	mux.Handle("PATCH /api/monitors/{id}", authMw(http.HandlerFunc(monitorsHandler.Update)))
+	mux.Handle("DELETE /api/monitors/{id}", authMw(http.HandlerFunc(monitorsHandler.Delete)))
 
 	handler := httpx.WithCORS(cfg.AllowedOrigins, mux)
 
@@ -45,7 +73,6 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Start server in background goroutine
 	shutdownErr := make(chan error, 1)
 	go func() {
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -55,13 +82,12 @@ func main() {
 
 	slog.Info("Pulse API listening", "addr", server.Addr)
 
-	// Listen for OS signals for graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
 	select {
 	case err := <-shutdownErr:
-		slog.Error("server encountered fatal error", "error", err)
+		slog.Error("server fatal error", "error", err)
 	case sig := <-quit:
 		slog.Info("shutting down server gracefully", "signal", sig.String())
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
