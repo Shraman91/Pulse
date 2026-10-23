@@ -1,0 +1,98 @@
+:root {
+  /* Core Raw Palette Tokens */
+  --silver-50: #F2F3F5;
+  --silver-200: #D9DCE0;
+  --silver-400: #B4B9C0;
+  --silver-600: #8A9099;
+  --aubergine-900: #1B0A1F;
+  --aubergine-700: #3A1540;
+  --aubergine-500: #5C2465;
+  --marigold-500: #F4A913;
+  --marigold-300: #FFC94D;
+
+  /* Monitor State Colors (Muted, paired with icon + text label) */
+  --state-up: #237836;
+  --state-up-bg: #EAF7ED;
+  --state-up-border: #95DE64;
+
+  --state-down: #A8071A;
+  --state-down-bg: #FFF1F0;
+  --state-down-border: #FFA39E;
+
+  --state-late: #AD6800;
+  --state-late-bg: #FFFBE6;
+  --state-late-border: #FFE58F;
+
+  --state-paused: #595959;
+  --state-paused-bg: #F5F5F5;
+  --state-paused-border: #D9D9D9;
+
+  --state-unknown: #8C8C8C;
+  --state-unknown-bg: #F5F5F5;
+  --state-unknown-border: #D9D9D9;
+
+  /* Semantic Theme Roles: Default Light Theme (Machined Silver Surface, Aubergine Ink) */
+  --bg-page: var(--silver-200);
+  --bg-panel: var(--silver-50);
+  --bg-subtle: #E2E5E9;
+  --border-subtle: var(--silver-400);
+  --border-strong: #9BA1AA;
+  
+  --text-primary: var(--aubergine-900);
+  --text-secondary: var(--silver-600);
+  --text-muted: #6B7280;
+
+  --accent-primary: var(--aubergine-500);
+  --accent-primary-hover: var(--aubergine-700);
+  --accent-primary-text: var(--silver-50);
+
+  --accent-hint: var(--marigold-500);
+  --focus-ring: var(--marigold-500);
+
+  --halftone-dot: var(--aubergine-900);
+  --halftone-bg: var(--silver-200);
+}
+
+/* Dark Theme (Aubergine-900 Surface, Silver Ink, Marigold-300 Hints) */
+html.dark {
+  --bg-page: var(--aubergine-900);
+  --bg-panel: #240E2A;
+  --bg-subtle: var(--aubergine-700);
+  --border-subtle: #4D1E54;
+  --border-strong: #722D7D;
+
+  --text-primary: var(--silver-200);
+  --text-secondary: #9FA5AF;
+  --text-muted: var(--silver-600);
+
+  --accent-primary: var(--aubergine-500);
+  --accent-primary-hover: #732D7F;
+  --accent-primary-text: var(--silver-50);
+
+  --accent-hint: var(--marigold-300);
+  --focus-ring: var(--marigold-300);
+
+  --halftone-dot: var(--silver-400);
+  --halftone-bg: var(--aubergine-900);
+
+  /* Dark Theme State Colors (Adapted for dark contrast) */
+  --state-up: #49AA19;
+  --state-up-bg: #132718;
+  --state-up-border: #1F4F28;
+
+  --state-down: #E84749;
+  --state-down-bg: #2A1215;
+  --state-down-border: #5C1D24;
+
+  --state-late: #D89614;
+  --state-late-bg: #2B1D0E;
+  --state-late-border: #593C15;
+
+  --state-paused: #8C8C8C;
+  --state-paused-bg: #1E1622;
+  --state-paused-border: #3D2944;
+
+  --state-unknown: #8C8C8C;
+  --state-unknown-bg: #1E1622;
+  --state-unknown-border: #3D2944;
+}
