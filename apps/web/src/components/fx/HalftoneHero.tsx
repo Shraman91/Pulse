@@ -59,7 +59,11 @@ void main() {
 `;
 
 const fragmentShader = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
+#else
+precision mediump float;
+#endif
 
 uniform float uTime;
 uniform vec2 uResolution;
@@ -137,6 +141,19 @@ export function HalftoneHero({ className = "" }: HalftoneHeroProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { resolvedTheme } = useTheme();
+  const themeRef = useRef(resolvedTheme);
+
+  const [hasWebGLError, setHasWebGLError] = React.useState(false);
+
+  useEffect(() => {
+    themeRef.current = resolvedTheme;
+  }, [resolvedTheme]);
+
+  const triggerFallback = useCallback(() => {
+    queueMicrotask(() => {
+      setHasWebGLError(true);
+    });
+  }, []);
 
   const isWebGLAvailable = useSyncExternalStore(
     subscribeNoop,
@@ -178,7 +195,7 @@ export function HalftoneHero({ className = "" }: HalftoneHeroProps) {
   }, []);
 
   useEffect(() => {
-    if (!isWebGLAvailable || reducedMotion) return;
+    if (!isWebGLAvailable || reducedMotion || hasWebGLError) return;
 
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -186,6 +203,7 @@ export function HalftoneHero({ className = "" }: HalftoneHeroProps) {
 
     let renderer: Renderer | null = null;
     let frameId: number | null = null;
+    let isCancelled = false;
 
     try {
       const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -195,123 +213,141 @@ export function HalftoneHero({ className = "" }: HalftoneHeroProps) {
         antialias: true,
         dpr,
       });
-    } catch {
-      return;
-    }
 
-    const gl = renderer.gl;
-    const geometry = new Triangle(gl);
-
-    const program = new Program(gl, {
-      vertex: vertexShader,
-      fragment: fragmentShader,
-      uniforms: {
-        uTime: { value: 0 },
-        uResolution: { value: [container.clientWidth, container.clientHeight] },
-        uMouse: { value: [-9999, -9999] },
-        uMouseActive: { value: 0 },
-        uTheme: { value: resolvedTheme === "dark" ? 1.0 : 0.0 },
-      },
-      transparent: true,
-      depthTest: false,
-    });
-
-    const mesh = new Mesh(gl, { geometry, program });
-
-    const handleResize = () => {
-      if (!container || !renderer) return;
-      const width = container.clientWidth;
-      const height = container.clientHeight;
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
-      renderer.dpr = dpr;
-      renderer.setSize(width, height);
-      program.uniforms.uResolution.value = [width * dpr, height * dpr];
-    };
-
-    handleResize();
-
-    const resizeObserver = new ResizeObserver(() => {
-      handleResize();
-    });
-    resizeObserver.observe(container);
-
-    const intersectionObserver = new IntersectionObserver(
-      ([entry]) => {
-        inViewRef.current = entry.isIntersecting;
-      },
-      { threshold: 0.05 }
-    );
-    intersectionObserver.observe(container);
-
-    const handleVisibility = () => {
-      isTabActiveRef.current = !document.hidden;
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-
-    container.addEventListener("mousemove", handleMouseMove);
-    container.addEventListener("mouseleave", handleMouseLeave);
-
-    const startTime = performance.now();
-    let currentMouseActive = 0;
-
-    const render = (now: number) => {
-      if (inViewRef.current && isTabActiveRef.current) {
-        const elapsed = (now - startTime) / 1000;
-        program.uniforms.uTime.value = elapsed;
-
-        // Smoothly ease mouseActive uniform
-        const targetActive = mouseStateRef.current.active;
-        currentMouseActive += (targetActive - currentMouseActive) * 0.15;
-        program.uniforms.uMouseActive.value = currentMouseActive;
-
-        // Scale mouse coords to canvas pixel space
-        const dpr = renderer.dpr;
-        program.uniforms.uMouse.value = [
-          mouseStateRef.current.x * dpr,
-          mouseStateRef.current.y * dpr,
-        ];
-
-        // Update theme uniform
-        program.uniforms.uTheme.value = resolvedTheme === "dark" ? 1.0 : 0.0;
-
-        renderer.render({ scene: mesh });
+      const gl = renderer.gl;
+      if (!gl) {
+        triggerFallback();
+        return;
       }
+
+      const geometry = new Triangle(gl);
+
+      const width = container.clientWidth || 800;
+      const height = container.clientHeight || 600;
+
+      const program = new Program(gl, {
+        vertex: vertexShader,
+        fragment: fragmentShader,
+        uniforms: {
+          uTime: { value: 0 },
+          uResolution: { value: [width * dpr, height * dpr] },
+          uMouse: { value: [-9999, -9999] },
+          uMouseActive: { value: 0 },
+          uTheme: { value: themeRef.current === "dark" ? 1.0 : 0.0 },
+        },
+        transparent: true,
+        depthTest: false,
+      });
+
+      // If shader linking failed, gracefully fall back
+      if (!program.uniformLocations) {
+        triggerFallback();
+        return;
+      }
+
+      const mesh = new Mesh(gl, { geometry, program });
+
+      const handleResize = () => {
+        if (!container || !renderer || isCancelled) return;
+        const w = container.clientWidth || 800;
+        const h = container.clientHeight || 600;
+        const currentDpr = Math.min(2, window.devicePixelRatio || 1);
+        renderer.dpr = currentDpr;
+        renderer.setSize(w, h);
+        if (program.uniforms.uResolution) {
+          program.uniforms.uResolution.value = [w * currentDpr, h * currentDpr];
+        }
+      };
+
+      handleResize();
+
+      const resizeObserver = new ResizeObserver(() => {
+        handleResize();
+      });
+      resizeObserver.observe(container);
+
+      const intersectionObserver = new IntersectionObserver(
+        ([entry]) => {
+          inViewRef.current = entry.isIntersecting;
+        },
+        { threshold: 0.05 }
+      );
+      intersectionObserver.observe(container);
+
+      const handleVisibility = () => {
+        isTabActiveRef.current = !document.hidden;
+      };
+      document.addEventListener("visibilitychange", handleVisibility);
+
+      container.addEventListener("mousemove", handleMouseMove);
+      container.addEventListener("mouseleave", handleMouseLeave);
+
+      const startTime = performance.now();
+      let currentMouseActive = 0;
+
+      const render = (now: number) => {
+        if (isCancelled) return;
+
+        if (inViewRef.current && isTabActiveRef.current && renderer) {
+          try {
+            const elapsed = (now - startTime) / 1000;
+            program.uniforms.uTime.value = elapsed;
+
+            // Smoothly ease mouseActive uniform
+            const targetActive = mouseStateRef.current.active;
+            currentMouseActive += (targetActive - currentMouseActive) * 0.15;
+            program.uniforms.uMouseActive.value = currentMouseActive;
+
+            // Scale mouse coords to canvas pixel space
+            const currentDpr = renderer.dpr || 1;
+            program.uniforms.uMouse.value = [
+              mouseStateRef.current.x * currentDpr,
+              mouseStateRef.current.y * currentDpr,
+            ];
+
+            // Update theme uniform from ref without restarting effect
+            program.uniforms.uTheme.value = themeRef.current === "dark" ? 1.0 : 0.0;
+
+            renderer.render({ scene: mesh });
+          } catch (renderErr) {
+            console.warn("[HalftoneHero] Render loop caught error, activating CSS fallback:", renderErr);
+            isCancelled = true;
+            triggerFallback();
+            return;
+          }
+        }
+
+        frameId = requestAnimationFrame(render);
+      };
 
       frameId = requestAnimationFrame(render);
-    };
 
-    frameId = requestAnimationFrame(render);
-
-    return () => {
-      if (frameId !== null) {
-        cancelAnimationFrame(frameId);
-      }
-      resizeObserver.disconnect();
-      intersectionObserver.disconnect();
-      document.removeEventListener("visibilitychange", handleVisibility);
-      container.removeEventListener("mousemove", handleMouseMove);
-      container.removeEventListener("mouseleave", handleMouseLeave);
-
-      // Clean up WebGL resources
-      try {
-        const loseContext = gl.getExtension("WEBGL_lose_context");
-        if (loseContext) {
-          loseContext.loseContext();
+      return () => {
+        isCancelled = true;
+        if (frameId !== null) {
+          cancelAnimationFrame(frameId);
         }
-      } catch {
-        // ignore cleanup error
-      }
-    };
+        resizeObserver.disconnect();
+        intersectionObserver.disconnect();
+        document.removeEventListener("visibilitychange", handleVisibility);
+        container.removeEventListener("mousemove", handleMouseMove);
+        container.removeEventListener("mouseleave", handleMouseLeave);
+      };
+    } catch (initErr) {
+      console.warn("[HalftoneHero] WebGL initialization failed, activating CSS fallback:", initErr);
+      triggerFallback();
+    }
   }, [
     isWebGLAvailable,
     reducedMotion,
-    resolvedTheme,
+    hasWebGLError,
     handleMouseMove,
     handleMouseLeave,
+    triggerFallback,
   ]);
 
-  // CSS Fallback when WebGL is unsupported or reduced-motion is requested
-  if (!isWebGLAvailable || reducedMotion) {
+  // CSS Fallback when WebGL is unsupported, reduced-motion is requested, or WebGL encounters an error
+  if (!isWebGLAvailable || reducedMotion || hasWebGLError) {
     return (
       <div
         className={`absolute inset-0 pointer-events-none overflow-hidden ${className}`}
@@ -339,3 +375,4 @@ export function HalftoneHero({ className = "" }: HalftoneHeroProps) {
     </div>
   );
 }
+
