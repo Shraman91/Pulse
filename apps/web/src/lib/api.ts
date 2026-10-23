@@ -117,6 +117,61 @@ export interface MonitorStats {
   points: RollupPoint[];
 }
 
+export interface StatusPage {
+  id: string;
+  ownerUid: string;
+  slug: string;
+  title: string;
+  description: string;
+  isPublic: boolean;
+  monitorIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicMonitorStatus {
+  id: string;
+  name: string;
+  type: "http" | "heartbeat";
+  state: "up" | "down" | "unknown";
+  uptime30d: number;
+  uptimeBars: RollupPoint[];
+}
+
+export interface PublicIncident {
+  id: string;
+  monitorName: string;
+  startedAt: string;
+  resolvedAt?: string | null;
+  cause: string;
+}
+
+export interface PublicStatusPageResponse {
+  title: string;
+  description: string;
+  slug: string;
+  systemState: "operational" | "degraded" | "outage";
+  monitors: PublicMonitorStatus[];
+  incidents: PublicIncident[];
+  updatedAt: string;
+}
+
+export interface CreateStatusPagePayload {
+  slug: string;
+  title: string;
+  description?: string;
+  isPublic: boolean;
+  monitorIds: string[];
+}
+
+export interface UpdateStatusPagePayload {
+  slug?: string;
+  title?: string;
+  description?: string;
+  isPublic?: boolean;
+  monitorIds?: string[];
+}
+
 export const api = {
   getMonitors: async (token: string): Promise<Monitor[]> => {
     return fetchWithAuth("/api/monitors", token);
@@ -162,6 +217,47 @@ export const api = {
     return fetchWithAuth("/api/alerts/test", token, {
       method: "POST",
       body: JSON.stringify({ channel, monitorName }),
+    });
+  },
+
+  // Public status page
+  getPublicStatusPage: async (slug: string): Promise<PublicStatusPageResponse> => {
+    const res = await fetch(`${API_BASE_URL}/api/status-pages/${encodeURIComponent(slug)}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      let errMessage = `HTTP error ${res.status}`;
+      try {
+        const data = await res.json();
+        errMessage = data.details || data.error || errMessage;
+      } catch {}
+      throw new Error(errMessage);
+    }
+    return res.json();
+  },
+
+  // Authenticated status page management
+  getStatusPages: async (token: string): Promise<StatusPage[]> => {
+    return fetchWithAuth("/api/status-pages", token);
+  },
+
+  createStatusPage: async (token: string, payload: CreateStatusPagePayload): Promise<StatusPage> => {
+    return fetchWithAuth("/api/status-pages", token, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateStatusPage: async (token: string, id: string, payload: UpdateStatusPagePayload): Promise<StatusPage> => {
+    return fetchWithAuth(`/api/status-pages/${id}`, token, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteStatusPage: async (token: string, id: string): Promise<void> => {
+    return fetchWithAuth(`/api/status-pages/${id}`, token, {
+      method: "DELETE",
     });
   },
 };

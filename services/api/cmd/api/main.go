@@ -18,6 +18,7 @@ import (
 	"pulse/internal/httpx"
 	"pulse/internal/incidents"
 	"pulse/internal/monitors"
+	"pulse/internal/statuspage"
 	"pulse/internal/store"
 )
 
@@ -53,6 +54,7 @@ func main() {
 	stateMachine := incidents.NewStateMachine(st, incidents.RealClock{}, alertsDispatcher.Dispatch)
 	monitorsHandler := monitors.NewHandler(st)
 	heartbeatHandler := heartbeat.NewHandler(st, stateMachine)
+	statusPageHandler := statuspage.NewHandler(st)
 
 	mux := http.NewServeMux()
 
@@ -65,6 +67,7 @@ func main() {
 		})
 	})
 	mux.HandleFunc("/ping/{token}", heartbeatHandler.Ping)
+	mux.HandleFunc("GET /api/status-pages/{slug}", statusPageHandler.GetPublic)
 
 	// Protected monitor CRUD & incident routes
 	mux.Handle("POST /api/monitors", authMw(http.HandlerFunc(monitorsHandler.Create)))
@@ -75,6 +78,12 @@ func main() {
 	mux.Handle("GET /api/monitors/{id}/stats", authMw(http.HandlerFunc(monitorsHandler.Stats)))
 	mux.Handle("GET /api/incidents", authMw(http.HandlerFunc(monitorsHandler.ListIncidents)))
 	mux.Handle("POST /api/alerts/test", authMw(http.HandlerFunc(alertsHandler.TestAlert)))
+
+	// Protected status page CRUD routes
+	mux.Handle("GET /api/status-pages", authMw(http.HandlerFunc(statusPageHandler.List)))
+	mux.Handle("POST /api/status-pages", authMw(http.HandlerFunc(statusPageHandler.Create)))
+	mux.Handle("PATCH /api/status-pages/{id}", authMw(http.HandlerFunc(statusPageHandler.Update)))
+	mux.Handle("DELETE /api/status-pages/{id}", authMw(http.HandlerFunc(statusPageHandler.Delete)))
 
 	handler := httpx.WithCORS(cfg.AllowedOrigins, mux)
 

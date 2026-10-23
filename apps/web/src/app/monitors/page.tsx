@@ -25,9 +25,18 @@ import {
   CheckCircle2,
   X,
   BarChart2,
+  Globe,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { api, Monitor, Incident, CreateMonitorPayload, AlertChannel } from "@/lib/api";
+import {
+  api,
+  Monitor,
+  Incident,
+  CreateMonitorPayload,
+  AlertChannel,
+  StatusPage,
+  CreateStatusPagePayload,
+} from "@/lib/api";
 import { MonitorStatsModal } from "@/components/dashboard/MonitorStatsModal";
 
 export default function MonitorsPage() {
@@ -35,7 +44,8 @@ export default function MonitorsPage() {
 
   const [monitors, setMonitors] = useState<Monitor[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [activeTab, setActiveTab] = useState<"monitors" | "incidents">("monitors");
+  const [statusPages, setStatusPages] = useState<StatusPage[]>([]);
+  const [activeTab, setActiveTab] = useState<"monitors" | "incidents" | "statuspages">("monitors");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,6 +62,16 @@ export default function MonitorsPage() {
   const [formGrace, setFormGrace] = useState(300);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Status Page Modal State
+  const [isStatusPageModalOpen, setIsStatusPageModalOpen] = useState(false);
+  const [spTitle, setSpTitle] = useState("");
+  const [spSlug, setSpSlug] = useState("");
+  const [spDesc, setSpDesc] = useState("");
+  const [spPublic, setSpPublic] = useState(true);
+  const [spSelectedMonitors, setSpSelectedMonitors] = useState<string[]>([]);
+  const [spSubmitting, setSpSubmitting] = useState(false);
+  const [spError, setSpError] = useState<string | null>(null);
 
   // Copied Ping Token State
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -70,12 +90,14 @@ export default function MonitorsPage() {
     try {
       setLoading(true);
       setError(null);
-      const [monData, incData] = await Promise.all([
+      const [monData, incData, spData] = await Promise.all([
         api.getMonitors(token),
         api.getIncidents(token).catch(() => []),
+        api.getStatusPages(token).catch(() => []),
       ]);
       setMonitors(monData);
       setIncidents(incData);
+      setStatusPages(spData);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to load monitors";
       setError(msg);
@@ -228,6 +250,48 @@ export default function MonitorsPage() {
       setError(err instanceof Error ? err.message : "Failed to remove alert channel.");
     } finally {
       setSavingAlerts(false);
+    }
+  };
+
+  const handleCreateStatusPage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+
+    setSpSubmitting(true);
+    setSpError(null);
+
+    const payload: CreateStatusPagePayload = {
+      title: spTitle.trim(),
+      slug: spSlug.trim().toLowerCase(),
+      description: spDesc.trim(),
+      isPublic: spPublic,
+      monitorIds: spSelectedMonitors,
+    };
+
+    try {
+      const newPage = await api.createStatusPage(token, payload);
+      setStatusPages((prev) => [newPage, ...prev]);
+      setIsStatusPageModalOpen(false);
+      setSpTitle("");
+      setSpSlug("");
+      setSpDesc("");
+      setSpSelectedMonitors([]);
+    } catch (err: unknown) {
+      setSpError(err instanceof Error ? err.message : "Failed to create status page");
+    } finally {
+      setSpSubmitting(false);
+    }
+  };
+
+  const handleDeleteStatusPage = async (id: string, title: string) => {
+    if (!token) return;
+    if (!confirm(`Are you sure you want to delete status page "${title}"?`)) return;
+
+    try {
+      await api.deleteStatusPage(token, id);
+      setStatusPages((prev) => prev.filter((p) => p.id !== id));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to delete status page");
     }
   };
 
@@ -429,6 +493,17 @@ export default function MonitorsPage() {
               >
                 Incidents History ({incidents.length})
               </button>
+              <button
+                onClick={() => setActiveTab("statuspages")}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                  activeTab === "statuspages"
+                    ? "bg-zinc-800 text-zinc-100 border border-zinc-700"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                <Globe className="h-3.5 w-3.5" />
+                Status Pages ({statusPages.length})
+              </button>
             </div>
 
             {error && (
@@ -479,6 +554,124 @@ export default function MonitorsPage() {
                 )}
               </div>
             ) : null}
+
+            {/* Status Pages List / View */}
+            {activeTab === "statuspages" && (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2">
+                  <div>
+                    <h3 className="text-base font-bold text-zinc-200">Public Status Pages</h3>
+                    <p className="text-xs text-zinc-400">
+                      Share real-time service health, 30-day uptime bars, and incident logs with your customers.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setIsStatusPageModalOpen(true)}
+                    className="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-xl bg-emerald-500 text-zinc-950 hover:bg-emerald-400 transition-colors shadow-[0_0_15px_rgba(16,185,129,0.2)] shrink-0 self-start sm:self-auto"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    New Status Page
+                  </button>
+                </div>
+
+                {statusPages.length === 0 ? (
+                  <div className="p-12 text-center rounded-2xl bg-zinc-900/20 border border-zinc-800/80 border-dashed">
+                    <Globe className="h-10 w-10 text-zinc-600 mx-auto mb-3" />
+                    <h3 className="text-base font-semibold text-zinc-300 mb-1">No status pages yet</h3>
+                    <p className="text-sm text-zinc-500 max-w-sm mx-auto mb-6">
+                      Create your first status page to publish your service uptime on a clean, shareable URL.
+                    </p>
+                    <button
+                      onClick={() => setIsStatusPageModalOpen(true)}
+                      className="inline-flex items-center gap-2 text-xs font-semibold px-4 py-2.5 rounded-xl bg-emerald-500 text-zinc-950 hover:bg-emerald-400 transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Create Status Page
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {statusPages.map((sp) => {
+                      const publicUrl = `/status/${sp.slug}`;
+                      return (
+                        <div
+                          key={sp.id}
+                          className="p-5 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-zinc-700/80 transition-all flex flex-col justify-between"
+                        >
+                          <div>
+                            <div className="flex items-start justify-between gap-3 mb-2">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`h-2.5 w-2.5 rounded-full ${
+                                    sp.isPublic ? "bg-emerald-500" : "bg-zinc-600"
+                                  }`}
+                                />
+                                <h4 className="font-bold text-base text-zinc-100">{sp.title}</h4>
+                              </div>
+                              <span
+                                className={`text-[10px] uppercase font-semibold px-2 py-0.5 rounded ${
+                                  sp.isPublic
+                                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                    : "bg-zinc-800 text-zinc-400"
+                                }`}
+                              >
+                                {sp.isPublic ? "Public" : "Private"}
+                              </span>
+                            </div>
+
+                            {sp.description && (
+                              <p className="text-xs text-zinc-400 mb-3 line-clamp-2">{sp.description}</p>
+                            )}
+
+                            <div className="mb-4 bg-zinc-950/60 p-2.5 rounded-xl border border-zinc-800/80">
+                              <span className="text-[11px] font-mono text-zinc-500 block mb-1">
+                                Public URL:
+                              </span>
+                              <Link
+                                href={publicUrl}
+                                target="_blank"
+                                className="text-xs font-mono text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 truncate"
+                              >
+                                <span>{publicUrl}</span>
+                                <ExternalLink className="h-3 w-3 shrink-0" />
+                              </Link>
+                            </div>
+
+                            <div className="text-xs font-mono text-zinc-500 mb-2">
+                              Monitored Services: {sp.monitorIds?.length || 0}
+                            </div>
+                          </div>
+
+                          <div className="border-t border-zinc-800/60 pt-3 flex items-center justify-between">
+                            <span className="text-[11px] font-mono text-zinc-500">
+                              Updated {new Date(sp.updatedAt).toLocaleDateString()}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <Link
+                                href={publicUrl}
+                                target="_blank"
+                                className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs flex items-center gap-1 transition-colors"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5 text-zinc-400" />
+                                <span>Open Page</span>
+                              </Link>
+                              <button
+                                onClick={() => handleDeleteStatusPage(sp.id, sp.title)}
+                                className="p-1.5 rounded-lg border border-zinc-800 bg-zinc-900 hover:bg-rose-950/40 hover:border-rose-900/50 text-zinc-400 hover:text-rose-400 transition-colors"
+                                title="Delete Status Page"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
 
             {/* Monitors Grid / Empty State */}
             {activeTab === "monitors" && (
@@ -1041,6 +1234,157 @@ export default function MonitorsPage() {
           token={token}
           onClose={() => setSelectedMonitorForStats(null)}
         />
+      )}
+
+      {/* Create Status Page Modal */}
+      {isStatusPageModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-lg rounded-2xl bg-zinc-900 border border-zinc-800 shadow-2xl p-6 my-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                  <Globe className="h-5 w-5" />
+                </div>
+                <h2 className="text-xl font-bold tracking-tight">Create Status Page</h2>
+              </div>
+              <button
+                onClick={() => setIsStatusPageModalOpen(false)}
+                className="p-1.5 rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {spError && (
+              <div className="p-3 mb-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{spError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateStatusPage} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
+                  Page Title
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Acme Production Services"
+                  value={spTitle}
+                  onChange={(e) => setSpTitle(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 focus:border-emerald-500/60 focus:outline-none focus:ring-1 focus:ring-emerald-500/60 text-sm text-zinc-100 transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
+                  URL Slug
+                </label>
+                <div className="flex rounded-xl bg-zinc-950 border border-zinc-800 focus-within:border-emerald-500/60 focus-within:ring-1 focus-within:ring-emerald-500/60 overflow-hidden">
+                  <span className="px-3 py-2.5 bg-zinc-900 border-r border-zinc-800 text-xs font-mono text-zinc-500 select-none">
+                    /status/
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="my-company"
+                    value={spSlug}
+                    onChange={(e) => setSpSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                    className="flex-1 px-3 py-2.5 bg-transparent focus:outline-none text-sm font-mono text-zinc-100"
+                  />
+                </div>
+                <p className="text-[11px] font-mono text-zinc-500 mt-1">
+                  Preview: /status/{spSlug || "your-slug"} (3-50 lowercase chars & hyphens)
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
+                  Description (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Real-time uptime and incident tracking for our customer-facing APIs."
+                  value={spDesc}
+                  onChange={(e) => setSpDesc(e.target.value)}
+                  className="w-full px-3.5 py-2 rounded-xl bg-zinc-950 border border-zinc-800 focus:border-emerald-500/60 focus:outline-none focus:ring-1 focus:ring-emerald-500/60 text-sm text-zinc-100 transition-colors resize-none"
+                />
+              </div>
+
+              {/* Include Monitors Checkbox list */}
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
+                  Include Monitors ({spSelectedMonitors.length} selected)
+                </label>
+                {monitors.length === 0 ? (
+                  <p className="text-xs text-zinc-500 italic">No monitors created yet.</p>
+                ) : (
+                  <div className="max-h-40 overflow-y-auto space-y-1.5 p-2 rounded-xl bg-zinc-950 border border-zinc-800">
+                    {monitors.map((m) => {
+                      const isChecked = spSelectedMonitors.includes(m.id);
+                      return (
+                        <label
+                          key={m.id}
+                          className="flex items-center gap-2.5 p-1.5 rounded-lg hover:bg-zinc-900 cursor-pointer text-xs select-none"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSpSelectedMonitors([...spSelectedMonitors, m.id]);
+                              } else {
+                                setSpSelectedMonitors(spSelectedMonitors.filter((id) => id !== m.id));
+                              }
+                            }}
+                            className="rounded border-zinc-700 text-emerald-500 focus:ring-emerald-500/40"
+                          />
+                          <span className="font-semibold text-zinc-200">{m.name}</span>
+                          <span className="text-[10px] font-mono uppercase text-zinc-500">({m.type})</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Public Toggle */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-950 border border-zinc-800">
+                <div>
+                  <span className="text-xs font-semibold text-zinc-200 block">Public Status Page</span>
+                  <span className="text-[11px] text-zinc-500">
+                    Anyone with the link can view your status page without logging in.
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={spPublic}
+                  onChange={(e) => setSpPublic(e.target.checked)}
+                  className="h-4 w-4 rounded border-zinc-700 text-emerald-500 focus:ring-emerald-500/40"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-800/80">
+                <button
+                  type="button"
+                  onClick={() => setIsStatusPageModalOpen(false)}
+                  className="px-4 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={spSubmitting || !spTitle.trim() || !spSlug.trim()}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-500 text-zinc-950 text-xs font-semibold hover:bg-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(16,185,129,0.2)]"
+                >
+                  <Plus className="h-4 w-4" />
+                  {spSubmitting ? "Creating..." : "Create Status Page"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

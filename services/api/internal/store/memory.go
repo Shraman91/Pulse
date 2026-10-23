@@ -15,6 +15,7 @@ type MemoryStore struct {
 	incidents     map[string]*Incident
 	checkFailures map[string][]*CheckFailure
 	rollups       map[string]*Rollup
+	statusPages   map[string]*StatusPage
 }
 
 // NewMemoryStore initializes an empty in-memory store.
@@ -24,6 +25,7 @@ func NewMemoryStore() *MemoryStore {
 		incidents:     make(map[string]*Incident),
 		checkFailures: make(map[string][]*CheckFailure),
 		rollups:       make(map[string]*Rollup),
+		statusPages:   make(map[string]*StatusPage),
 	}
 }
 
@@ -422,3 +424,113 @@ func (s *MemoryStore) GetRollups(ctx context.Context, monitorID string, from tim
 
 	return result, nil
 }
+
+func (s *MemoryStore) CreateStatusPage(ctx context.Context, sp *StatusPage) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, existing := range s.statusPages {
+		if existing.Slug == sp.Slug {
+			return ErrSlugTaken
+		}
+	}
+
+	clone := *sp
+	s.statusPages[sp.ID] = &clone
+	return nil
+}
+
+func (s *MemoryStore) GetStatusPageBySlug(ctx context.Context, slug string) (*StatusPage, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, sp := range s.statusPages {
+		if sp.Slug == slug {
+			clone := *sp
+			return &clone, nil
+		}
+	}
+	return nil, ErrNotFound
+}
+
+func (s *MemoryStore) GetStatusPageByID(ctx context.Context, id string) (*StatusPage, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	sp, exists := s.statusPages[id]
+	if !exists {
+		return nil, ErrNotFound
+	}
+	clone := *sp
+	return &clone, nil
+}
+
+func (s *MemoryStore) ListStatusPagesByOwner(ctx context.Context, ownerUID string) ([]*StatusPage, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var result []*StatusPage
+	for _, sp := range s.statusPages {
+		if sp.OwnerUID == ownerUID {
+			clone := *sp
+			result = append(result, &clone)
+		}
+	}
+	return result, nil
+}
+
+func (s *MemoryStore) UpdateStatusPage(ctx context.Context, ownerUID string, id string, req *UpdateStatusPageRequest) (*StatusPage, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	sp, exists := s.statusPages[id]
+	if !exists {
+		return nil, ErrNotFound
+	}
+	if sp.OwnerUID != ownerUID {
+		return nil, ErrUnauthorized
+	}
+
+	if req.Slug != nil && *req.Slug != sp.Slug {
+		for _, existing := range s.statusPages {
+			if existing.ID != id && existing.Slug == *req.Slug {
+				return nil, ErrSlugTaken
+			}
+		}
+		sp.Slug = *req.Slug
+	}
+
+	if req.Title != nil {
+		sp.Title = *req.Title
+	}
+	if req.Description != nil {
+		sp.Description = *req.Description
+	}
+	if req.IsPublic != nil {
+		sp.IsPublic = *req.IsPublic
+	}
+	if req.MonitorIDs != nil {
+		sp.MonitorIDs = *req.MonitorIDs
+	}
+	sp.UpdatedAt = time.Now().UTC()
+
+	clone := *sp
+	return &clone, nil
+}
+
+func (s *MemoryStore) DeleteStatusPage(ctx context.Context, ownerUID string, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	sp, exists := s.statusPages[id]
+	if !exists {
+		return ErrNotFound
+	}
+	if sp.OwnerUID != ownerUID {
+		return ErrUnauthorized
+	}
+
+	delete(s.statusPages, id)
+	return nil
+}
+

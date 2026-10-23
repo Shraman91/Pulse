@@ -39,4 +39,12 @@ type Store interface {
 	// Hourly rollup telemetry operations
 	RecordRollup(ctx context.Context, monitorID string, latencyMs int64, ok bool, dnsMs, connectMs, tlsMs, ttfbMs int64, ts time.Time) error
 	GetRollups(ctx context.Context, monitorID string, from time.Time, to time.Time) ([]*Rollup, error)
+
+	// Status Page operations
+	CreateStatusPage(ctx context.Context, sp *StatusPage) error
+	GetStatusPageBySlug(ctx context.Context, slug string) (*StatusPage, error)
+	GetStatusPageByID(ctx context.Context, id string) (*StatusPage, error)
+	ListStatusPagesByOwner(ctx context.Context, ownerUID string) ([]*StatusPage, error)
+	UpdateStatusPage(ctx context.Context, ownerUID string, id string, req *UpdateStatusPageRequest) (*StatusPage, error)
+	DeleteStatusPage(ctx context.Context, ownerUID string, id string) error
 }

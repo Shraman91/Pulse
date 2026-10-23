@@ -11,6 +11,7 @@ var (
 	ErrQuotaExceeded  = errors.New("monitor quota limit reached (max 10)")
 	ErrInvalidInput   = errors.New("invalid monitor input")
 	ErrLeaseContested = errors.New("monitor lease already acquired by another worker")
+	ErrSlugTaken      = errors.New("slug is already taken")
 )
 
 type MonitorType string
@@ -133,3 +134,59 @@ type MonitorStats struct {
 	MaxLatencyMs  int64         `json:"maxLatencyMs"`
 	Points        []RollupPoint `json:"points"`
 }
+
+type StatusPage struct {
+	ID          string    `json:"id" firestore:"id"`
+	OwnerUID    string    `json:"ownerUid" firestore:"ownerUid"`
+	Slug        string    `json:"slug" firestore:"slug"`
+	Title       string    `json:"title" firestore:"title"`
+	Description string    `json:"description" firestore:"description"`
+	IsPublic    bool      `json:"isPublic" firestore:"isPublic"`
+	MonitorIDs  []string  `json:"monitorIds" firestore:"monitorIds"`
+	CreatedAt   time.Time `json:"createdAt" firestore:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt" firestore:"updatedAt"`
+}
+
+type CreateStatusPageRequest struct {
+	Slug        string   `json:"slug"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	IsPublic    bool     `json:"isPublic"`
+	MonitorIDs  []string `json:"monitorIds"`
+}
+
+type UpdateStatusPageRequest struct {
+	Slug        *string   `json:"slug,omitempty"`
+	Title       *string   `json:"title,omitempty"`
+	Description *string   `json:"description,omitempty"`
+	IsPublic    *bool     `json:"isPublic,omitempty"`
+	MonitorIDs  *[]string `json:"monitorIds,omitempty"`
+}
+
+type PublicMonitorStatus struct {
+	ID         string        `json:"id"`
+	Name       string        `json:"name"`
+	Type       MonitorType   `json:"type"`
+	State      MonitorState  `json:"state"`
+	Uptime30d  float64       `json:"uptime30d"`
+	UptimeBars []RollupPoint `json:"uptimeBars"`
+}
+
+type PublicIncident struct {
+	ID          string     `json:"id"`
+	MonitorName string     `json:"monitorName"`
+	StartedAt   time.Time  `json:"startedAt"`
+	ResolvedAt  *time.Time `json:"resolvedAt,omitempty"`
+	Cause       string     `json:"cause"`
+}
+
+type PublicStatusPageResponse struct {
+	Title       string                `json:"title"`
+	Description string                `json:"description"`
+	Slug        string                `json:"slug"`
+	SystemState string                `json:"systemState"` // "operational", "degraded", "outage"
+	Monitors    []PublicMonitorStatus `json:"monitors"`
+	Incidents   []PublicIncident      `json:"incidents"`
+	UpdatedAt   time.Time             `json:"updatedAt"`
+}
+
