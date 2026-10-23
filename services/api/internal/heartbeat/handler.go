@@ -64,6 +64,8 @@ func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	_ = h.store.RecordRollup(ctx, m.ID, 0, true, 0, 0, 0, 0, now)
+
 	httpx.JSON(w, http.StatusOK, map[string]any{
 		"ok":          true,
 		"monitorId":   m.ID,

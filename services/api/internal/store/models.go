@@ -94,3 +94,42 @@ type CheckFailure struct {
 	TLSHandshakeMs int64     `json:"tlsMs" firestore:"tlsMs"`
 	TTFBMs         int64     `json:"ttfbMs" firestore:"ttfbMs"`
 }
+
+type Rollup struct {
+	ID           string    `json:"id" firestore:"id"` // yyyyMMddHH (e.g. "2026102317")
+	MonitorID    string    `json:"monitorId" firestore:"monitorId"`
+	Hour         time.Time `json:"hour" firestore:"hour"` // Truncated to the hour
+	Checks       int       `json:"checks" firestore:"checks"`
+	Failures     int       `json:"failures" firestore:"failures"`
+	LatencySumMs int64     `json:"latencySumMs" firestore:"latencySumMs"`
+	LatencyMaxMs int64     `json:"latencyMaxMs" firestore:"latencyMaxMs"`
+	DNSSumMs     int64     `json:"dnsMs" firestore:"dnsMs"`
+	ConnectSumMs int64     `json:"connectMs" firestore:"connectMs"`
+	TLSSumMs     int64     `json:"tlsMs" firestore:"tlsMs"`
+	TTFBSumMs    int64     `json:"ttfbMs" firestore:"ttfbMs"`
+}
+
+type RollupPoint struct {
+	Timestamp         time.Time `json:"timestamp"`
+	HourLabel         string    `json:"hourLabel"`
+	Checks            int       `json:"checks"`
+	Failures          int       `json:"failures"`
+	UptimePct         float64   `json:"uptimePct"`
+	AvgLatencyMs      int64     `json:"avgLatencyMs"`
+	MaxLatencyMs      int64     `json:"maxLatencyMs"`
+	AvgDNSMs          int64     `json:"avgDnsMs"`
+	AvgConnectMs      int64     `json:"avgConnectMs"`
+	AvgTLSHandshakeMs int64     `json:"avgTlsMs"`
+	AvgTTFBMs         int64     `json:"avgTtfbMs"`
+}
+
+type MonitorStats struct {
+	MonitorID     string        `json:"monitorId"`
+	Range         string        `json:"range"`
+	TotalChecks   int           `json:"totalChecks"`
+	TotalFailures int           `json:"totalFailures"`
+	UptimePct     float64       `json:"uptimePct"`
+	AvgLatencyMs  int64         `json:"avgLatencyMs"`
+	MaxLatencyMs  int64         `json:"maxLatencyMs"`
+	Points        []RollupPoint `json:"points"`
+}

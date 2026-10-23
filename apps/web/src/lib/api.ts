@@ -94,6 +94,29 @@ export interface Incident {
   alertDispatched: boolean;
 }
 
+export interface RollupPoint {
+  hour: string;
+  checks: number;
+  failures: number;
+  avgLatencyMs: number;
+  peakLatencyMs: number;
+  dnsMs: number;
+  connectMs: number;
+  tlsMs: number;
+  ttfbMs: number;
+}
+
+export interface MonitorStats {
+  monitorId: string;
+  range: string;
+  uptimePct: number;
+  avgLatencyMs: number;
+  peakLatencyMs: number;
+  totalChecks: number;
+  totalFailures: number;
+  points: RollupPoint[];
+}
+
 export const api = {
   getMonitors: async (token: string): Promise<Monitor[]> => {
     return fetchWithAuth("/api/monitors", token);
@@ -127,6 +150,10 @@ export const api = {
     return fetchWithAuth("/api/incidents", token);
   },
 
+  getMonitorStats: async (token: string, id: string, range = "24h"): Promise<MonitorStats> => {
+    return fetchWithAuth(`/api/monitors/${id}/stats?range=${encodeURIComponent(range)}`, token);
+  },
+
   testAlertChannel: async (
     token: string,
     channel: AlertChannel,
@@ -138,3 +165,4 @@ export const api = {
     });
   },
 };
+

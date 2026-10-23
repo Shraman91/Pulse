@@ -24,9 +24,11 @@ import {
   Send,
   CheckCircle2,
   X,
+  BarChart2,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { api, Monitor, Incident, CreateMonitorPayload, AlertChannel } from "@/lib/api";
+import { MonitorStatsModal } from "@/components/dashboard/MonitorStatsModal";
 
 export default function MonitorsPage() {
   const { user, token, loading: authLoading, signInWithGoogle, signInWithGithub, signInDev, signOut } = useAuth();
@@ -56,6 +58,7 @@ export default function MonitorsPage() {
 
   // Alert Channels Modal State
   const [selectedMonitorForAlerts, setSelectedMonitorForAlerts] = useState<Monitor | null>(null);
+  const [selectedMonitorForStats, setSelectedMonitorForStats] = useState<Monitor | null>(null);
   const [newChannelType, setNewChannelType] = useState<"discord" | "slack" | "telegram">("discord");
   const [newChannelTarget, setNewChannelTarget] = useState("");
   const [testingAlert, setTestingAlert] = useState(false);
@@ -622,6 +625,14 @@ export default function MonitorsPage() {
                       <div className="border-t border-zinc-800/60 pt-3 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <button
+                            onClick={() => setSelectedMonitorForStats(m)}
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-sky-400 text-xs transition-colors"
+                            title="View Telemetry & Latency Breakdown"
+                          >
+                            <BarChart2 className="h-3.5 w-3.5 text-sky-400" />
+                            <span>Telemetry</span>
+                          </button>
+                          <button
                             onClick={() => handleOpenAlertsModal(m)}
                             className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-emerald-400 text-xs transition-colors"
                             title="Manage Alert Channels"
@@ -1021,6 +1032,15 @@ export default function MonitorsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Telemetry & Stats Modal */}
+      {selectedMonitorForStats && token && (
+        <MonitorStatsModal
+          monitor={selectedMonitorForStats}
+          token={token}
+          onClose={() => setSelectedMonitorForStats(null)}
+        />
       )}
     </div>
   );

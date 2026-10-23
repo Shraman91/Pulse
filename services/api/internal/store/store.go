@@ -35,4 +35,8 @@ type Store interface {
 	// Check failure operations (failures only, 30-day TTL)
 	RecordCheckFailure(ctx context.Context, check *CheckFailure) error
 	ListCheckFailures(ctx context.Context, monitorID string, limit int) ([]*CheckFailure, error)
+
+	// Hourly rollup telemetry operations
+	RecordRollup(ctx context.Context, monitorID string, latencyMs int64, ok bool, dnsMs, connectMs, tlsMs, ttfbMs int64, ts time.Time) error
+	GetRollups(ctx context.Context, monitorID string, from time.Time, to time.Time) ([]*Rollup, error)
 }

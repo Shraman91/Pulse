@@ -59,6 +59,8 @@ func (s *Scheduler) checkHeartbeat(ctx context.Context, m *store.Monitor, now ti
 			slog.Error("failed to process heartbeat timeout", "monitorId", m.ID, "error", err)
 		}
 
+		_ = s.store.RecordRollup(ctx, m.ID, 0, false, 0, 0, 0, 0, now)
+
 		if s.onCheckCompleted != nil {
 			s.onCheckCompleted(m, &checker.Result{
 				OK:    false,

@@ -72,6 +72,7 @@ func main() {
 	mux.Handle("GET /api/monitors/{id}", authMw(http.HandlerFunc(monitorsHandler.Get)))
 	mux.Handle("PATCH /api/monitors/{id}", authMw(http.HandlerFunc(monitorsHandler.Update)))
 	mux.Handle("DELETE /api/monitors/{id}", authMw(http.HandlerFunc(monitorsHandler.Delete)))
+	mux.Handle("GET /api/monitors/{id}/stats", authMw(http.HandlerFunc(monitorsHandler.Stats)))
 	mux.Handle("GET /api/incidents", authMw(http.HandlerFunc(monitorsHandler.ListIncidents)))
 	mux.Handle("POST /api/alerts/test", authMw(http.HandlerFunc(alertsHandler.TestAlert)))
 

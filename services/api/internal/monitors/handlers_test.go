@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"pulse/internal/auth"
 	"pulse/internal/store"
@@ -26,6 +27,7 @@ func TestMonitorHandlers(t *testing.T) {
 	mux.HandleFunc("GET /api/monitors/{id}", h.Get)
 	mux.HandleFunc("PATCH /api/monitors/{id}", h.Update)
 	mux.HandleFunc("DELETE /api/monitors/{id}", h.Delete)
+	mux.HandleFunc("GET /api/monitors/{id}/stats", h.Stats)
 	mux.HandleFunc("GET /api/incidents", h.ListIncidents)
 
 	server := mw(mux)
@@ -246,6 +248,58 @@ func TestMonitorHandlers(t *testing.T) {
 		_ = json.Unmarshal(rec.Body.Bytes(), &incidents)
 		if len(incidents) != 1 || incidents[0].ID != "inc_test_1" {
 			t.Errorf("expected 1 incident returned, got %v", incidents)
+		}
+	})
+
+	t.Run("stats endpoint returns computed rollups and uptime percentage", func(t *testing.T) {
+		now := time.Now().UTC()
+		m := &store.Monitor{
+			ID:          "mon_stats_1",
+			OwnerUID:    "user_stats",
+			Name:        "API Endpoint",
+			Type:        store.MonitorTypeHTTP,
+			URL:         "https://example.com",
+			Method:      "GET",
+			IntervalSec: 60,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+		_ = st.CreateMonitor(context.Background(), m)
+
+		// Seed 2 hourly rollups:
+		// Hour 1: 150ms latency, OK
+		_ = st.RecordRollup(context.Background(), "mon_stats_1", 150, true, 20, 30, 40, 60, now.Add(-1*time.Hour))
+		// Hour 2: 200ms latency, failed
+		_ = st.RecordRollup(context.Background(), "mon_stats_1", 200, false, 25, 35, 45, 95, now)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/monitors/mon_stats_1/stats?range=24h", nil)
+		req.Header.Set("Authorization", "Bearer dev:user_stats:user@pulse.dev")
+		rec := httptest.NewRecorder()
+		server.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 for GET /api/monitors/{id}/stats, got %d (body: %s)", rec.Code, rec.Body.String())
+		}
+
+		var stats store.MonitorStats
+		if err := json.Unmarshal(rec.Body.Bytes(), &stats); err != nil {
+			t.Fatalf("failed to decode stats: %v", err)
+		}
+
+		if stats.MonitorID != "mon_stats_1" {
+			t.Errorf("expected monitor ID mon_stats_1, got %s", stats.MonitorID)
+		}
+		if stats.TotalChecks != 2 {
+			t.Errorf("expected 2 total checks, got %d", stats.TotalChecks)
+		}
+		if stats.TotalFailures != 1 {
+			t.Errorf("expected 1 failure, got %d", stats.TotalFailures)
+		}
+		if stats.UptimePct != 50.0 {
+			t.Errorf("expected 50%% uptime, got %f", stats.UptimePct)
+		}
+		if len(stats.Points) != 2 {
+			t.Errorf("expected 2 points, got %d", len(stats.Points))
 		}
 	})
 }

@@ -215,6 +215,11 @@ func (s *Scheduler) executeCheck(ctx context.Context, m *store.Monitor) {
 			slog.Error("failed to process check result", "monitorId", m.ID, "error", processErr)
 		}
 
+		// Record hourly telemetry rollup
+		if rollupErr := s.store.RecordRollup(ctx, m.ID, result.LatencyMs, result.OK, result.DNSMs, result.ConnectMs, result.TLSHandshakeMs, result.TTFBMs, now); rollupErr != nil {
+			slog.Error("failed to record rollup", "monitorId", m.ID, "error", rollupErr)
+		}
+
 		// Invoke completion hook if registered
 		if s.onCheckCompleted != nil {
 			s.onCheckCompleted(m, result)

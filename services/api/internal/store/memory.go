@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"sync"
 	"time"
 )
@@ -12,6 +14,7 @@ type MemoryStore struct {
 	monitors      map[string]*Monitor
 	incidents     map[string]*Incident
 	checkFailures map[string][]*CheckFailure
+	rollups       map[string]*Rollup
 }
 
 // NewMemoryStore initializes an empty in-memory store.
@@ -20,6 +23,7 @@ func NewMemoryStore() *MemoryStore {
 		monitors:      make(map[string]*Monitor),
 		incidents:     make(map[string]*Incident),
 		checkFailures: make(map[string][]*CheckFailure),
+		rollups:       make(map[string]*Rollup),
 	}
 }
 
@@ -363,5 +367,58 @@ func (s *MemoryStore) ListCheckFailures(ctx context.Context, monitorID string, l
 	if limit > 0 && len(result) > limit {
 		result = result[:limit]
 	}
+	return result, nil
+}
+
+func (s *MemoryStore) RecordRollup(ctx context.Context, monitorID string, latencyMs int64, ok bool, dnsMs, connectMs, tlsMs, ttfbMs int64, ts time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	hourTime := time.Date(ts.Year(), ts.Month(), ts.Day(), ts.Hour(), 0, 0, 0, time.UTC)
+	hourKey := hourTime.Format("2006010215")
+	rollupKey := fmt.Sprintf("%s_%s", monitorID, hourKey)
+
+	r, exists := s.rollups[rollupKey]
+	if !exists {
+		r = &Rollup{
+			ID:        hourKey,
+			MonitorID: monitorID,
+			Hour:      hourTime,
+		}
+		s.rollups[rollupKey] = r
+	}
+
+	r.Checks++
+	if !ok {
+		r.Failures++
+	}
+	r.LatencySumMs += latencyMs
+	if latencyMs > r.LatencyMaxMs {
+		r.LatencyMaxMs = latencyMs
+	}
+	r.DNSSumMs += dnsMs
+	r.ConnectSumMs += connectMs
+	r.TLSSumMs += tlsMs
+	r.TTFBSumMs += ttfbMs
+
+	return nil
+}
+
+func (s *MemoryStore) GetRollups(ctx context.Context, monitorID string, from time.Time, to time.Time) ([]*Rollup, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var result []*Rollup
+	for _, r := range s.rollups {
+		if r.MonitorID == monitorID && (r.Hour.Equal(from) || r.Hour.After(from)) && (r.Hour.Equal(to) || r.Hour.Before(to)) {
+			clone := *r
+			result = append(result, &clone)
+		}
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Hour.Before(result[j].Hour)
+	})
+
 	return result, nil
 }
