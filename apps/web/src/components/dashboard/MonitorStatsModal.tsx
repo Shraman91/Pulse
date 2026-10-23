@@ -1,17 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useSyncExternalStore } from "react";
 import {
   X,
   Activity,
   Clock,
   Zap,
-  TrendingUp,
   RefreshCw,
   BarChart3,
-  CheckCircle2,
-  AlertTriangle,
-  XCircle,
   ShieldAlert,
 } from "lucide-react";
 import {
@@ -21,9 +17,12 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  Legend,
 } from "recharts";
 import { Monitor, MonitorStats, api } from "@/lib/api";
+
+function subscribeNoop() {
+  return () => {};
+}
 
 interface MonitorStatsModalProps {
   monitor: Monitor;
@@ -36,11 +35,12 @@ export function MonitorStatsModal({ monitor, token, onClose }: MonitorStatsModal
   const [stats, setStats] = useState<MonitorStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false
+  );
 
   const fetchStats = useCallback(async () => {
     if (!token || !monitor.id) return;

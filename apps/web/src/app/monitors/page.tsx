@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
   Activity,
@@ -9,86 +9,101 @@ import {
   Pause,
   Trash2,
   ExternalLink,
-  Copy,
-  Check,
   Radio,
-  Clock,
-  Shield,
   LogIn,
   LogOut,
   AlertCircle,
-  Server,
-  Zap,
-  Flame,
   Bell,
-  Send,
   CheckCircle2,
-  X,
+  XCircle,
   BarChart2,
   Globe,
+  Search,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import {
   api,
   Monitor,
   Incident,
-  CreateMonitorPayload,
-  AlertChannel,
   StatusPage,
   CreateStatusPagePayload,
+  CreateMonitorPayload,
+  AlertChannel,
 } from "@/lib/api";
-import { MonitorStatsModal } from "@/components/dashboard/MonitorStatsModal";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { TableSkeleton } from "@/components/ui/LoadingSkeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { MonitorForm } from "@/components/monitors/MonitorForm";
+
+function getNowSnapshot(): number {
+  if (typeof window === "undefined") return 0;
+  return Date.now();
+}
+
+function subscribeNow(callback: () => void) {
+  const timer = setInterval(callback, 5000);
+  return () => clearInterval(timer);
+}
 
 export default function MonitorsPage() {
-  const { user, token, loading: authLoading, signInWithGoogle, signInWithGithub, signInDev, signOut } = useAuth();
+  const {
+    user,
+    token,
+    loading: authLoading,
+    signInWithGoogle,
+    signInWithGithub,
+    signInDev,
+    signOut,
+  } = useAuth();
+
+  const currentTime = useSyncExternalStore(subscribeNow, getNowSnapshot, () => 0);
 
   const [monitors, setMonitors] = useState<Monitor[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [statusPages, setStatusPages] = useState<StatusPage[]>([]);
-  const [activeTab, setActiveTab] = useState<"monitors" | "incidents" | "statuspages">("monitors");
+  const [activeTab, setActiveTab] = useState<
+    "monitors" | "incidents" | "statuspages"
+  >("monitors");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterState, setFilterState] = useState<
+    "all" | "up" | "down" | "paused"
+  >("all");
 
-  // Modal State
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [monitorType, setMonitorType] = useState<"http" | "heartbeat">("http");
-  const [formName, setFormName] = useState("");
-  const [formURL, setFormURL] = useState("https://");
-  const [formMethod, setFormMethod] = useState("GET");
-  const [formInterval, setFormInterval] = useState(300);
-  const [formTimeout, setFormTimeout] = useState(10000);
-  const [formExpectedStatus, setFormExpectedStatus] = useState(200);
-  const [formExpectedEvery, setFormExpectedEvery] = useState(3600);
-  const [formGrace, setFormGrace] = useState(300);
-  const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
+  // Create Monitor Modal State
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // Status Page Modal State
   const [isStatusPageModalOpen, setIsStatusPageModalOpen] = useState(false);
   const [spTitle, setSpTitle] = useState("");
   const [spSlug, setSpSlug] = useState("");
   const [spDesc, setSpDesc] = useState("");
-  const [spPublic, setSpPublic] = useState(true);
+  const spPublic = true;
   const [spSelectedMonitors, setSpSelectedMonitors] = useState<string[]>([]);
   const [spSubmitting, setSpSubmitting] = useState(false);
   const [spError, setSpError] = useState<string | null>(null);
 
-  // Copied Ping Token State
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  // Alert Channels Modal State
-  const [selectedMonitorForAlerts, setSelectedMonitorForAlerts] = useState<Monitor | null>(null);
-  const [selectedMonitorForStats, setSelectedMonitorForStats] = useState<Monitor | null>(null);
-  const [newChannelType, setNewChannelType] = useState<"discord" | "slack" | "telegram">("discord");
+  // Alert Settings Modal State
+  const [selectedMonitorForAlerts, setSelectedMonitorForAlerts] =
+    useState<Monitor | null>(null);
+  const [newChannelType, setNewChannelType] = useState<
+    "discord" | "slack" | "telegram"
+  >("discord");
   const [newChannelTarget, setNewChannelTarget] = useState("");
   const [testingAlert, setTestingAlert] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [testResult, setTestResult] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
   const [savingAlerts, setSavingAlerts] = useState(false);
 
-  const fetchMonitors = async () => {
+  // Load monitors, incidents, status pages
+  const fetchData = useCallback(async () => {
     if (!token) return;
     try {
-      setLoading(true);
       setError(null);
       const [monData, incData, spData] = await Promise.all([
         api.getMonitors(token),
@@ -99,948 +114,881 @@ export default function MonitorsPage() {
       setIncidents(incData);
       setStatusPages(spData);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to load monitors";
+      const msg =
+        err instanceof Error ? err.message : "Failed to load dashboard data";
       setError(msg);
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
 
   useEffect(() => {
     if (token) {
-      fetchMonitors();
-    } else if (!authLoading) {
-      setLoading(false);
+      fetchData();
+      const interval = setInterval(fetchData, 30000);
+      return () => clearInterval(interval);
     }
-  }, [token, authLoading]);
+  }, [token, fetchData]);
 
-  const handleCreateMonitor = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Handle Pause / Resume
+  const handleTogglePause = async (mon: Monitor) => {
     if (!token) return;
-
-    setSubmitting(true);
-    setFormError(null);
-
-    const payload: CreateMonitorPayload = {
-      name: formName.trim(),
-      type: monitorType,
-    };
-
-    if (monitorType === "http") {
-      payload.url = formURL.trim();
-      payload.method = formMethod;
-      payload.intervalSec = Number(formInterval);
-      payload.timeoutMs = Number(formTimeout);
-      payload.expectedStatus = Number(formExpectedStatus);
-    } else {
-      payload.expectedEverySec = Number(formExpectedEvery);
-      payload.graceSec = Number(formGrace);
-    }
-
     try {
-      const created = await api.createMonitor(token, payload);
-      setMonitors((prev) => [created, ...prev]);
-      setIsModalOpen(false);
-      resetForm();
+      const updated = await api.updateMonitor(token, mon.id, {
+        paused: !mon.paused,
+      });
+      setMonitors((prev) => prev.map((m) => (m.id === mon.id ? updated : m)));
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to create monitor";
-      setFormError(msg);
-    } finally {
-      setSubmitting(false);
+      alert(err instanceof Error ? err.message : "Failed to update monitor");
     }
   };
 
-  const handleTogglePause = async (m: Monitor) => {
+  // Handle Delete
+  const handleDeleteMonitor = async (id: string, name: string) => {
     if (!token) return;
-    try {
-      const updated = await api.updateMonitor(token, m.id, { paused: !m.paused });
-      setMonitors((prev) => prev.map((item) => (item.id === m.id ? updated : item)));
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed to toggle pause");
-    }
-  };
-
-  const handleDelete = async (id: string, name: string) => {
-    if (!token) return;
-    if (!confirm(`Are you sure you want to delete monitor "${name}"?`)) return;
-
+    if (!confirm(`Delete monitor "${name}"? This cannot be undone.`)) return;
     try {
       await api.deleteMonitor(token, id);
-      setMonitors((prev) => prev.filter((item) => item.id !== id));
+      setMonitors((prev) => prev.filter((m) => m.id !== id));
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Failed to delete monitor");
     }
   };
 
-  const copyToClipboard = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
-
-  const handleOpenAlertsModal = (m: Monitor) => {
-    setSelectedMonitorForAlerts(m);
-    setNewChannelType("discord");
-    setNewChannelTarget("");
-    setTestResult(null);
-  };
-
-  const handleTestAlertChannel = async () => {
-    if (!token || !selectedMonitorForAlerts || !newChannelTarget.trim()) return;
-    setTestingAlert(true);
-    setTestResult(null);
+  // Handle Create Monitor Submit
+  const handleCreateSubmit = async (payload: CreateMonitorPayload) => {
+    if (!token) return;
     try {
-      const res = await api.testAlertChannel(
-        token,
-        { type: newChannelType, target: newChannelTarget.trim() },
-        selectedMonitorForAlerts.name
-      );
-      if (res.ok) {
-        setTestResult({ ok: true, message: res.message || "Test notification delivered successfully!" });
-      } else {
-        setTestResult({ ok: false, message: res.error || "Failed to deliver test notification." });
-      }
+      setCreateSubmitting(true);
+      setCreateError(null);
+      const created = await api.createMonitor(token, payload);
+      setMonitors((prev) => [created, ...prev]);
+      setIsCreateModalOpen(false);
     } catch (err: unknown) {
-      setTestResult({
-        ok: false,
-        message: err instanceof Error ? err.message : "Failed to deliver test notification.",
-      });
+      const msg =
+        err instanceof Error ? err.message : "Failed to create monitor";
+      setCreateError(msg);
+      throw err;
     } finally {
-      setTestingAlert(false);
+      setCreateSubmitting(false);
     }
   };
 
-  const handleAddAlertChannel = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!token || !selectedMonitorForAlerts || !newChannelTarget.trim()) return;
-    setSavingAlerts(true);
-    const updatedChannels: AlertChannel[] = [
-      ...(selectedMonitorForAlerts.alertChannels || []),
-      { type: newChannelType, target: newChannelTarget.trim() },
-    ];
-    try {
-      const updated = await api.updateMonitor(token, selectedMonitorForAlerts.id, {
-        alertChannels: updatedChannels,
-      });
-      setSelectedMonitorForAlerts(updated);
-      setMonitors((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
-      setNewChannelTarget("");
-      setTestResult(null);
-    } catch (err: unknown) {
-      setTestResult({
-        ok: false,
-        message: err instanceof Error ? err.message : "Failed to save alert channel.",
-      });
-    } finally {
-      setSavingAlerts(false);
-    }
-  };
-
-  const handleDeleteAlertChannel = async (index: number) => {
-    if (!token || !selectedMonitorForAlerts) return;
-    setSavingAlerts(true);
-    const updatedChannels = (selectedMonitorForAlerts.alertChannels || []).filter((_, i) => i !== index);
-    try {
-      const updated = await api.updateMonitor(token, selectedMonitorForAlerts.id, {
-        alertChannels: updatedChannels,
-      });
-      setSelectedMonitorForAlerts(updated);
-      setMonitors((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to remove alert channel.");
-    } finally {
-      setSavingAlerts(false);
-    }
-  };
-
+  // Handle Create Status Page Submit
   const handleCreateStatusPage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) return;
-
-    setSpSubmitting(true);
-    setSpError(null);
-
-    const payload: CreateStatusPagePayload = {
-      title: spTitle.trim(),
-      slug: spSlug.trim().toLowerCase(),
-      description: spDesc.trim(),
-      isPublic: spPublic,
-      monitorIds: spSelectedMonitors,
-    };
-
     try {
-      const newPage = await api.createStatusPage(token, payload);
-      setStatusPages((prev) => [newPage, ...prev]);
+      setSpSubmitting(true);
+      setSpError(null);
+      const payload: CreateStatusPagePayload = {
+        title: spTitle.trim(),
+        slug: spSlug.trim().toLowerCase(),
+        description: spDesc.trim(),
+        isPublic: spPublic,
+        monitorIds: spSelectedMonitors,
+      };
+      const created = await api.createStatusPage(token, payload);
+      setStatusPages((prev) => [created, ...prev]);
       setIsStatusPageModalOpen(false);
       setSpTitle("");
       setSpSlug("");
       setSpDesc("");
       setSpSelectedMonitors([]);
     } catch (err: unknown) {
-      setSpError(err instanceof Error ? err.message : "Failed to create status page");
+      const msg =
+        err instanceof Error ? err.message : "Failed to create status page";
+      setSpError(msg);
     } finally {
       setSpSubmitting(false);
     }
   };
 
+  // Handle Delete Status Page
   const handleDeleteStatusPage = async (id: string, title: string) => {
     if (!token) return;
-    if (!confirm(`Are you sure you want to delete status page "${title}"?`)) return;
-
+    if (!confirm(`Delete status page "${title}"?`)) return;
     try {
       await api.deleteStatusPage(token, id);
-      setStatusPages((prev) => prev.filter((p) => p.id !== id));
+      setStatusPages((prev) => prev.filter((sp) => sp.id !== id));
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to delete status page");
+      alert(
+        err instanceof Error ? err.message : "Failed to delete status page"
+      );
     }
   };
 
-  const resetForm = () => {
-    setFormName("");
-    setFormURL("https://");
-    setFormMethod("GET");
-    setFormInterval(300);
-    setFormTimeout(10000);
-    setFormExpectedStatus(200);
-    setFormExpectedEvery(3600);
-    setFormGrace(300);
-    setFormError(null);
+  // Handle Add/Remove Alert Channel
+  const handleSaveAlertChannels = async (channels: AlertChannel[]) => {
+    if (!token || !selectedMonitorForAlerts) return;
+    try {
+      setSavingAlerts(true);
+      const updated = await api.updateMonitor(
+        token,
+        selectedMonitorForAlerts.id,
+        {
+          alertChannels: channels,
+        }
+      );
+      setMonitors((prev) =>
+        prev.map((m) => (m.id === updated.id ? updated : m))
+      );
+      setSelectedMonitorForAlerts(updated);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to save alert channels");
+    } finally {
+      setSavingAlerts(false);
+    }
   };
 
-  // Quota calculation
-  const monitorCount = monitors.length;
-  const isQuotaReached = monitorCount >= 10;
+  const handleTestAlertChannel = async () => {
+    if (!token || !newChannelTarget.trim()) return;
+    try {
+      setTestingAlert(true);
+      setTestResult(null);
+      await api.testAlertChannel(token, {
+        type: newChannelType,
+        target: newChannelTarget.trim(),
+      });
+      setTestResult({
+        ok: true,
+        message: "Test webhook delivered successfully!",
+      });
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Failed to send test alert";
+      setTestResult({ ok: false, message: msg });
+    } finally {
+      setTestingAlert(false);
+    }
+  };
 
-  return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans">
-      {/* Navigation */}
-      <header className="border-b border-zinc-800/80 bg-zinc-950/70 backdrop-blur-md sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-              <Activity className="h-5 w-5 animate-pulse" />
+  // Summary counts
+  const summary = useMemo(() => {
+    const up = monitors.filter((m) => !m.paused && m.state === "up").length;
+    const down = monitors.filter((m) => !m.paused && m.state === "down").length;
+    const late = monitors.filter(
+      (m) => !m.paused && m.type === "heartbeat" && m.state === "down"
+    ).length;
+    const paused = monitors.filter((m) => m.paused).length;
+    const openIncidents = incidents.filter((inc) => !inc.resolvedAt).length;
+
+    return { up, down, late, paused, openIncidents };
+  }, [monitors, incidents]);
+
+  // Filtered monitors list
+  const filteredMonitors = useMemo(() => {
+    return monitors.filter((m) => {
+      // Search
+      const matchesSearch =
+        m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (m.url && m.url.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (m.pingToken && m.pingToken.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      if (!matchesSearch) return false;
+
+      // Filter state
+      if (filterState === "up") return !m.paused && m.state === "up";
+      if (filterState === "down") return !m.paused && m.state === "down";
+      if (filterState === "paused") return m.paused;
+      return true;
+    });
+  }, [monitors, searchQuery, filterState]);
+
+  // Auth loading state
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[var(--bg-page)] text-[var(--text-primary)] p-6 sm:p-10 max-w-6xl mx-auto space-y-6">
+        <div className="flex justify-between items-center pb-4 border-b border-[var(--border-subtle)]">
+          <TableSkeleton rows={6} />
+        </div>
+      </div>
+    );
+  }
+
+  // Unauthenticated View
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-[var(--bg-page)] text-[var(--text-primary)] selection:bg-[var(--aubergine-500)] selection:text-[var(--silver-50)] flex flex-col justify-center items-center p-6">
+        <div className="w-full max-w-md p-8 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] shadow-xl text-center space-y-6">
+          <div className="w-12 h-12 rounded-xl bg-[var(--aubergine-500)] text-[var(--silver-50)] flex items-center justify-center font-bold mx-auto shadow-sm">
+            <Activity className="w-6 h-6" />
+          </div>
+
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
+              Sign in to Pulse
+            </h1>
+            <p className="text-xs text-[var(--text-secondary)] mt-1.5 leading-relaxed">
+              Precision uptime &amp; dead man&apos;s switch monitoring instrument.
+            </p>
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <button
+              type="button"
+              onClick={() => signInWithGoogle()}
+              className="w-full py-2.5 px-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-page)] text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--silver-50)] dark:hover:bg-[var(--silver-200)]/10 transition-colors flex items-center justify-center gap-2 focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] outline-none"
+            >
+              <LogIn className="w-4 h-4 text-[var(--text-secondary)]" />
+              <span>Continue with Google</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => signInWithGithub()}
+              className="w-full py-2.5 px-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-page)] text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--silver-50)] dark:hover:bg-[var(--silver-200)]/10 transition-colors flex items-center justify-center gap-2 focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] outline-none"
+            >
+              <LogIn className="w-4 h-4 text-[var(--text-secondary)]" />
+              <span>Continue with GitHub</span>
+            </button>
+
+            <div className="pt-2 border-t border-[var(--border-subtle)]">
+              <button
+                type="button"
+                onClick={() => signInDev()}
+                className="w-full py-2 px-3 rounded-lg bg-[var(--aubergine-900)] text-[var(--silver-50)] text-xs font-semibold hover:bg-[var(--aubergine-700)] transition-colors focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] outline-none"
+              >
+                Sign in with Developer Mode (Instant)
+              </button>
             </div>
-            <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-white via-zinc-200 to-zinc-400 bg-clip-text text-transparent">
-              Pulse
-            </span>
-          </Link>
-
-          <div className="flex items-center gap-4">
-            {user ? (
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                  <span className="text-zinc-300 font-medium">{user.email || user.displayName}</span>
-                  {user.isDev && (
-                    <span className="bg-amber-500/20 text-amber-300 text-[10px] px-1.5 py-0.2 rounded font-mono">
-                      DEV
-                    </span>
-                  )}
-                </div>
-                <button
-                  onClick={signOut}
-                  className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-rose-400 transition-colors py-1.5 px-3 rounded-lg border border-zinc-800 hover:border-rose-900/50 bg-zinc-900/40"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                  Sign Out
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => signInDev()}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors border border-zinc-700"
-                >
-                  Quick Dev Login
-                </button>
-                <button
-                  onClick={signInWithGoogle}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500 text-zinc-950 hover:bg-emerald-400 transition-colors flex items-center gap-1.5"
-                >
-                  <LogIn className="h-3.5 w-3.5" />
-                  Sign In
-                </button>
-              </div>
-            )}
           </div>
         </div>
-      </header>
+      </div>
+    );
+  }
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8">
-        {!user && !authLoading ? (
-          /* Unauthenticated State View */
-          <div className="max-w-md mx-auto my-16 p-8 rounded-2xl bg-zinc-900/60 border border-zinc-800 text-center">
-            <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto mb-4">
-              <Shield className="h-6 w-6" />
-            </div>
-            <h2 className="text-xl font-bold mb-2">Sign in to Pulse</h2>
-            <p className="text-sm text-zinc-400 mb-6">
-              Create and manage your HTTP monitors and cron heartbeat check-ins.
-            </p>
-
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={() => signInDev()}
-                className="w-full py-2.5 px-4 rounded-xl bg-emerald-500 text-zinc-950 font-semibold hover:bg-emerald-400 transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.2)]"
-              >
-                <Zap className="h-4 w-4" />
-                Sign In with 1-Click Dev Mode
-              </button>
-              <button
-                onClick={signInWithGoogle}
-                className="w-full py-2.5 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 font-medium transition-colors flex items-center justify-center gap-2"
-              >
-                Sign In with Google
-              </button>
-              <button
-                onClick={signInWithGithub}
-                className="w-full py-2.5 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 font-medium transition-colors flex items-center justify-center gap-2"
-              >
-                Sign In with GitHub
-              </button>
-            </div>
-          </div>
-        ) : (
-          /* Authenticated Dashboard View */
-          <div>
-            {/* Dashboard Controls & Quota */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight">Monitors</h1>
-                <p className="text-sm text-zinc-400 mt-1">
-                  Manage active endpoints, cron jobs, and notification channels.
-                </p>
+  return (
+    <div className="min-h-screen bg-[var(--bg-page)] text-[var(--text-primary)] selection:bg-[var(--aubergine-500)] selection:text-[var(--silver-50)] transition-colors duration-200">
+      {/* Top App Header */}
+      <header className="border-b border-[var(--border-subtle)] bg-[var(--bg-panel)]/80 backdrop-blur-md sticky top-0 z-30">
+        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+          {/* Logo & Navigation Tabs */}
+          <div className="flex items-center gap-6">
+            <Link
+              href="/"
+              className="flex items-center gap-2 text-sm font-bold tracking-tight hover:opacity-85 transition-opacity"
+            >
+              <div className="w-7 h-7 rounded-lg bg-[var(--aubergine-500)] text-[var(--silver-50)] flex items-center justify-center font-bold">
+                <Activity className="w-4 h-4" />
               </div>
+              <span>Pulse</span>
+            </Link>
 
-              <div className="flex items-center gap-4">
-                {/* Quota Indicator */}
-                <div className="flex items-center gap-2.5 bg-zinc-900/60 border border-zinc-800 px-3.5 py-2 rounded-xl text-xs">
-                  <span className="text-zinc-400 font-medium">Quota:</span>
-                  <div className="w-20 bg-zinc-800 rounded-full h-2 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        isQuotaReached ? "bg-rose-500" : "bg-emerald-400"
-                      }`}
-                      style={{ width: `${(monitorCount / 10) * 100}%` }}
-                    />
-                  </div>
-                  <span className={`font-mono font-semibold ${isQuotaReached ? "text-rose-400" : "text-zinc-200"}`}>
-                    {monitorCount} / 10
-                  </span>
-                </div>
-
-                {/* Create Monitor Button */}
-                <button
-                  onClick={() => setIsModalOpen(true)}
-                  disabled={isQuotaReached}
-                  className={`flex items-center gap-2 text-xs font-semibold px-4 py-2.5 rounded-xl transition-all ${
-                    isQuotaReached
-                      ? "bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700/50"
-                      : "bg-emerald-500 text-zinc-950 hover:bg-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.25)]"
-                  }`}
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Monitor
-                </button>
-              </div>
-            </div>
-
-            {/* Active Incidents Banner */}
-            {incidents.filter((inc) => !inc.resolvedAt).length > 0 && (
-              <div className="mb-6 p-4 rounded-2xl bg-rose-950/40 border border-rose-900/60 shadow-[0_0_20px_rgba(244,63,94,0.1)]">
-                <div className="flex items-center gap-2 text-sm font-semibold text-rose-400 mb-2">
-                  <Flame className="h-4 w-4 animate-pulse text-rose-500" />
-                  Active Outage Detected ({incidents.filter((inc) => !inc.resolvedAt).length})
-                </div>
-                <div className="space-y-1.5">
-                  {incidents
-                    .filter((inc) => !inc.resolvedAt)
-                    .map((inc) => (
-                      <div
-                        key={inc.id}
-                        className="text-xs bg-rose-950/60 border border-rose-900/40 rounded-xl px-3 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-rose-200"
-                      >
-                        <span className="font-semibold text-rose-300">{inc.monitorName}: <span className="font-normal text-rose-400/90">{inc.cause}</span></span>
-                        <span className="font-mono text-[11px] text-rose-400/70">
-                          Started: {new Date(inc.startedAt).toLocaleTimeString()}
-                        </span>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            )}
-
-            {/* View Switcher Tabs */}
-            <div className="flex items-center gap-2 mb-6 border-b border-zinc-800 pb-3">
+            <nav aria-label="Dashboard sections" className="hidden sm:flex items-center gap-1">
               <button
+                type="button"
                 onClick={() => setActiveTab("monitors")}
-                className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                   activeTab === "monitors"
-                    ? "bg-zinc-800 text-zinc-100 border border-zinc-700"
-                    : "text-zinc-500 hover:text-zinc-300"
+                    ? "bg-[var(--bg-page)] text-[var(--text-primary)] border border-[var(--border-subtle)]"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 }`}
               >
                 Monitors ({monitors.length})
               </button>
+
               <button
+                type="button"
                 onClick={() => setActiveTab("incidents")}
-                className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors relative ${
                   activeTab === "incidents"
-                    ? "bg-zinc-800 text-zinc-100 border border-zinc-700"
-                    : "text-zinc-500 hover:text-zinc-300"
+                    ? "bg-[var(--bg-page)] text-[var(--text-primary)] border border-[var(--border-subtle)]"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 }`}
               >
-                Incidents History ({incidents.length})
+                <span>Incidents</span>
+                {summary.openIncidents > 0 && (
+                  <span className="ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] bg-[var(--status-down)] text-white font-bold">
+                    {summary.openIncidents}
+                  </span>
+                )}
               </button>
+
               <button
+                type="button"
                 onClick={() => setActiveTab("statuspages")}
-                className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                   activeTab === "statuspages"
-                    ? "bg-zinc-800 text-zinc-100 border border-zinc-700"
-                    : "text-zinc-500 hover:text-zinc-300"
+                    ? "bg-[var(--bg-page)] text-[var(--text-primary)] border border-[var(--border-subtle)]"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 }`}
               >
-                <Globe className="h-3.5 w-3.5" />
-                Status Pages ({statusPages.length})
+                Status pages ({statusPages.length})
+              </button>
+            </nav>
+          </div>
+
+          {/* User & Theme Toggle */}
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+
+            <div className="flex items-center gap-2 pl-3 border-l border-[var(--border-subtle)]">
+              <span className="text-xs font-mono text-[var(--text-secondary)] hidden md:inline truncate max-w-[140px]">
+                {user.email || user.displayName || "Dev User"}
+              </span>
+              <button
+                type="button"
+                onClick={() => signOut()}
+                aria-label="Sign out"
+                className="p-1.5 rounded-lg border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--status-down)] hover:border-red-500/30 transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5" />
               </button>
             </div>
+          </div>
+        </div>
+      </header>
 
-            {error && (
-              <div className="p-4 mb-6 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm flex items-center gap-3">
-                <AlertCircle className="h-5 w-5 shrink-0" />
-                <span>{error}</span>
-              </div>
+      {/* Main Content Area */}
+      <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
+        {/* System Overview Status Bar */}
+        <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4 text-xs font-mono">
+            <span className="text-[var(--text-secondary)] font-semibold">
+              System overview:
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-[var(--text-primary)]">
+              <span className="w-2 h-2 rounded-full bg-[var(--status-up)]" />
+              <strong>{summary.up}</strong> up
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-[var(--text-primary)]">
+              <span className="w-2 h-2 rounded-full bg-[var(--status-down)]" />
+              <strong>{summary.down}</strong> down
+            </span>
+            {summary.late > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-[var(--status-late)]">
+                <span className="w-2 h-2 rounded-full bg-[var(--status-late)]" />
+                <strong>{summary.late}</strong> late
+              </span>
             )}
+            <span className="inline-flex items-center gap-1.5 text-[var(--text-secondary)]">
+              <strong>{summary.openIncidents}</strong> open incidents
+            </span>
+          </div>
 
-            {activeTab === "incidents" ? (
-              <div className="space-y-3">
-                {incidents.length === 0 ? (
-                  <div className="p-12 text-center rounded-2xl bg-zinc-900/20 border border-zinc-800/80 border-dashed text-zinc-500 text-sm">
-                    No incidents recorded. All systems running cleanly!
-                  </div>
-                ) : (
-                  incidents.map((inc) => (
-                    <div
-                      key={inc.id}
-                      className="p-4 rounded-xl bg-zinc-900/40 border border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
-                    >
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
-                              inc.resolvedAt
-                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                            }`}
-                          >
-                            {inc.resolvedAt ? "Resolved" : "Active Outage"}
-                          </span>
-                          <span className="font-semibold text-sm text-zinc-200">{inc.monitorName}</span>
-                        </div>
-                        <p className="text-zinc-400 font-mono text-[11px]">{inc.cause}</p>
-                      </div>
+          {activeTab === "monitors" && (
+            <button
+              type="button"
+              onClick={() => setIsCreateModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[var(--aubergine-900)] text-[var(--silver-50)] text-xs font-semibold hover:bg-[var(--aubergine-700)] transition-colors shadow-sm focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] outline-none"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Create monitor</span>
+            </button>
+          )}
 
-                      <div className="text-right font-mono text-[11px] text-zinc-500 shrink-0">
-                        <div>Started: {new Date(inc.startedAt).toLocaleString()}</div>
-                        {inc.resolvedAt && (
-                          <div className="text-emerald-400/80">
-                            Resolved: {new Date(inc.resolvedAt).toLocaleString()}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            ) : null}
+          {activeTab === "statuspages" && (
+            <button
+              type="button"
+              onClick={() => setIsStatusPageModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[var(--aubergine-900)] text-[var(--silver-50)] text-xs font-semibold hover:bg-[var(--aubergine-700)] transition-colors shadow-sm focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] outline-none"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Create status page</span>
+            </button>
+          )}
+        </div>
 
-            {/* Status Pages List / View */}
-            {activeTab === "statuspages" && (
-              <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2">
-                  <div>
-                    <h3 className="text-base font-bold text-zinc-200">Public Status Pages</h3>
-                    <p className="text-xs text-zinc-400">
-                      Share real-time service health, 30-day uptime bars, and incident logs with your customers.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setIsStatusPageModalOpen(true)}
-                    className="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-xl bg-emerald-500 text-zinc-950 hover:bg-emerald-400 transition-colors shadow-[0_0_15px_rgba(16,185,129,0.2)] shrink-0 self-start sm:self-auto"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    New Status Page
-                  </button>
+        {/* Error notification banner */}
+        {error && (
+          <div className="p-3.5 rounded-xl border border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300 text-xs flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+            <button
+              type="button"
+              onClick={fetchData}
+              className="px-2.5 py-1 rounded bg-[var(--bg-panel)] border border-[var(--border-subtle)] text-[11px] font-semibold"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* TAB 1: MONITORS */}
+        {activeTab === "monitors" && (
+          <section aria-labelledby="monitors-table-heading" className="space-y-4">
+            {/* Search and Filters */}
+            {monitors.length > 0 && (
+              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search monitors by name or URL..."
+                    className="w-full pl-9 pr-3.5 py-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-panel)] text-xs text-[var(--text-primary)] placeholder-[var(--text-secondary)] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] outline-none"
+                  />
                 </div>
 
-                {statusPages.length === 0 ? (
-                  <div className="p-12 text-center rounded-2xl bg-zinc-900/20 border border-zinc-800/80 border-dashed">
-                    <Globe className="h-10 w-10 text-zinc-600 mx-auto mb-3" />
-                    <h3 className="text-base font-semibold text-zinc-300 mb-1">No status pages yet</h3>
-                    <p className="text-sm text-zinc-500 max-w-sm mx-auto mb-6">
-                      Create your first status page to publish your service uptime on a clean, shareable URL.
-                    </p>
+                <div className="flex rounded-lg p-0.5 bg-[var(--bg-panel)] border border-[var(--border-subtle)]">
+                  {(["all", "up", "down", "paused"] as const).map((st) => (
                     <button
-                      onClick={() => setIsStatusPageModalOpen(true)}
-                      className="inline-flex items-center gap-2 text-xs font-semibold px-4 py-2.5 rounded-xl bg-emerald-500 text-zinc-950 hover:bg-emerald-400 transition-colors"
+                      key={st}
+                      type="button"
+                      onClick={() => setFilterState(st)}
+                      className={`px-3 py-1 rounded-md text-xs font-semibold capitalize transition-colors ${
+                        filterState === st
+                          ? "bg-[var(--bg-page)] text-[var(--text-primary)] shadow-sm"
+                          : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                      }`}
                     >
-                      <Plus className="h-4 w-4" />
-                      Create Status Page
+                      {st}
                     </button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {statusPages.map((sp) => {
-                      const publicUrl = `/status/${sp.slug}`;
-                      return (
-                        <div
-                          key={sp.id}
-                          className="p-5 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-zinc-700/80 transition-all flex flex-col justify-between"
-                        >
-                          <div>
-                            <div className="flex items-start justify-between gap-3 mb-2">
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={`h-2.5 w-2.5 rounded-full ${
-                                    sp.isPublic ? "bg-emerald-500" : "bg-zinc-600"
-                                  }`}
-                                />
-                                <h4 className="font-bold text-base text-zinc-100">{sp.title}</h4>
-                              </div>
-                              <span
-                                className={`text-[10px] uppercase font-semibold px-2 py-0.5 rounded ${
-                                  sp.isPublic
-                                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                    : "bg-zinc-800 text-zinc-400"
-                                }`}
-                              >
-                                {sp.isPublic ? "Public" : "Private"}
-                              </span>
-                            </div>
-
-                            {sp.description && (
-                              <p className="text-xs text-zinc-400 mb-3 line-clamp-2">{sp.description}</p>
-                            )}
-
-                            <div className="mb-4 bg-zinc-950/60 p-2.5 rounded-xl border border-zinc-800/80">
-                              <span className="text-[11px] font-mono text-zinc-500 block mb-1">
-                                Public URL:
-                              </span>
-                              <Link
-                                href={publicUrl}
-                                target="_blank"
-                                className="text-xs font-mono text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 truncate"
-                              >
-                                <span>{publicUrl}</span>
-                                <ExternalLink className="h-3 w-3 shrink-0" />
-                              </Link>
-                            </div>
-
-                            <div className="text-xs font-mono text-zinc-500 mb-2">
-                              Monitored Services: {sp.monitorIds?.length || 0}
-                            </div>
-                          </div>
-
-                          <div className="border-t border-zinc-800/60 pt-3 flex items-center justify-between">
-                            <span className="text-[11px] font-mono text-zinc-500">
-                              Updated {new Date(sp.updatedAt).toLocaleDateString()}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <Link
-                                href={publicUrl}
-                                target="_blank"
-                                className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs flex items-center gap-1 transition-colors"
-                              >
-                                <ExternalLink className="h-3.5 w-3.5 text-zinc-400" />
-                                <span>Open Page</span>
-                              </Link>
-                              <button
-                                onClick={() => handleDeleteStatusPage(sp.id, sp.title)}
-                                className="p-1.5 rounded-lg border border-zinc-800 bg-zinc-900 hover:bg-rose-950/40 hover:border-rose-900/50 text-zinc-400 hover:text-rose-400 transition-colors"
-                                title="Delete Status Page"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                  ))}
+                </div>
               </div>
             )}
 
-
-            {/* Monitors Grid / Empty State */}
-            {activeTab === "monitors" && (
-              <>
-                {loading ? (
-              <div className="py-24 text-center text-zinc-500 text-sm">
-                <Activity className="h-6 w-6 animate-spin mx-auto mb-3 text-emerald-400" />
-                Loading your monitors...
-              </div>
-            ) : monitors.length === 0 ? (
-              <div className="p-12 text-center rounded-2xl bg-zinc-900/20 border border-zinc-800/80 border-dashed">
-                <Server className="h-10 w-10 text-zinc-600 mx-auto mb-3" />
-                <h3 className="text-base font-semibold text-zinc-300 mb-1">No monitors configured</h3>
-                <p className="text-sm text-zinc-500 max-w-sm mx-auto mb-6">
-                  Set up your first HTTP check or heartbeat dead man&apos;s switch to track service uptime.
-                </p>
-                <button
-                  onClick={() => setIsModalOpen(true)}
-                  className="inline-flex items-center gap-2 text-xs font-semibold px-4 py-2.5 rounded-xl bg-emerald-500 text-zinc-950 hover:bg-emerald-400 transition-colors"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Your First Monitor
-                </button>
-              </div>
+            {loading ? (
+              <TableSkeleton rows={5} />
+            ) : filteredMonitors.length === 0 ? (
+              monitors.length === 0 ? (
+                <EmptyState
+                  icon={<Globe className="w-6 h-6" />}
+                  title="No monitors yet"
+                  description="Add your first HTTP endpoint or heartbeat cron job to start monitoring."
+                  actionLabel="Create monitor"
+                  onAction={() => setIsCreateModalOpen(true)}
+                />
+              ) : (
+                <div className="p-8 text-center text-xs text-[var(--text-secondary)] rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-panel)]">
+                  No monitors match your current search and filter.
+                </div>
+              )
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {monitors.map((m) => {
-                  const pingUrl = `http://localhost:8080/ping/${m.pingToken}`;
-                  const curlSnippet = `curl -s "${pingUrl}"`;
+              /* Dense Laboratory-Grade Monitors Table */
+              <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] overflow-hidden shadow-sm">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-page)]/60 text-[var(--text-secondary)] font-mono text-[11px]">
+                      <th className="py-3 px-4 font-medium">State</th>
+                      <th className="py-3 px-4 font-medium">Monitor</th>
+                      <th className="py-3 px-4 font-medium hidden md:table-cell">
+                        Target / Cron
+                      </th>
+                      <th className="py-3 px-4 font-medium hidden sm:table-cell">
+                        Interval
+                      </th>
+                      <th className="py-3 px-4 font-medium text-right">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border-subtle)]">
+                    {filteredMonitors.map((mon) => {
+                      const isCheckingNow =
+                        !mon.paused &&
+                        mon.nextCheckAt &&
+                        currentTime > 0 &&
+                        new Date(mon.nextCheckAt).getTime() <= currentTime + 15000;
 
-                  return (
-                    <div
-                      key={m.id}
-                      className="p-5 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-zinc-700/80 transition-all flex flex-col justify-between"
-                    >
-                      <div>
-                        {/* Card Header */}
-                        <div className="flex items-start justify-between gap-3 mb-3">
-                          <div className="flex items-center gap-2.5">
-                            {/* Health Dot */}
-                            {m.paused ? (
-                              <span className="h-3 w-3 rounded-full bg-zinc-600" title="Paused" />
-                            ) : m.state === "up" ? (
-                              <span className="relative flex h-3 w-3">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500" />
-                              </span>
-                            ) : m.state === "down" ? (
-                              <span className="relative flex h-3 w-3">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
-                                <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500" />
-                              </span>
+                      return (
+                        <tr
+                          key={mon.id}
+                          className="hover:bg-[var(--bg-page)]/70 transition-colors group"
+                        >
+                          {/* State Column */}
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              {mon.paused ? (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-[var(--silver-400)]/20 text-[var(--text-secondary)]">
+                                  <span className="w-2 h-2 rounded-full bg-[var(--status-paused)]" />
+                                  <span>Paused</span>
+                                </span>
+                              ) : mon.state === "up" ? (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/15 text-emerald-800 dark:text-emerald-300">
+                                  <span className="w-2 h-2 rounded-full bg-[var(--status-up)]" />
+                                  <span>Up</span>
+                                </span>
+                              ) : mon.state === "down" ? (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-red-500/15 text-red-800 dark:text-red-300">
+                                  <span className="w-2 h-2 rounded-full bg-[var(--status-down)]" />
+                                  <span>Down</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/15 text-amber-800 dark:text-amber-300">
+                                  <span className="w-2 h-2 rounded-full bg-[var(--accent-hint)]" />
+                                  <span>Pending</span>
+                                </span>
+                              )}
+
+                              {/* Marigold "Checking Now" dot */}
+                              {isCheckingNow && (
+                                <span
+                                  title="Checking right now"
+                                  className="w-1.5 h-1.5 rounded-full bg-[var(--accent-hint)] animate-ping"
+                                />
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Name Column */}
+                          <td className="py-3 px-4">
+                            <Link
+                              href={`/monitors/${mon.id}`}
+                              className="font-bold text-[var(--text-primary)] hover:underline flex items-center gap-1.5"
+                            >
+                              <span>{mon.name}</span>
+                              <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 text-[var(--text-secondary)] transition-opacity" />
+                            </Link>
+                            <span className="text-[11px] font-mono text-[var(--text-secondary)] block sm:hidden truncate max-w-[200px]">
+                              {mon.type === "http" ? mon.url : `cron: ping/${mon.pingToken?.slice(0, 8)}`}
+                            </span>
+                          </td>
+
+                          {/* Target Column */}
+                          <td className="py-3 px-4 hidden md:table-cell font-mono text-[11px] text-[var(--text-secondary)] max-w-xs truncate">
+                            {mon.type === "http" ? (
+                              <span className="truncate">{mon.url}</span>
                             ) : (
-                              <span className="h-3 w-3 rounded-full bg-amber-400" title="Pending initial check" />
+                              <div className="flex items-center gap-1.5">
+                                <Radio className="w-3 h-3 text-[var(--accent-hint)] shrink-0" />
+                                <span className="truncate">
+                                  ping/{mon.pingToken?.slice(0, 12)}...
+                                </span>
+                              </div>
                             )}
+                          </td>
 
-                            <span className="font-semibold text-base tracking-tight text-zinc-100">{m.name}</span>
-                          </div>
+                          {/* Interval Column */}
+                          <td className="py-3 px-4 hidden sm:table-cell font-mono text-[11px] text-[var(--text-secondary)]">
+                            {mon.type === "http"
+                              ? `${mon.intervalSec}s`
+                              : `${mon.expectedEverySec}s`}
+                          </td>
 
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/50">
-                              {m.type}
-                            </span>
-                            <span
-                              className={`text-[10px] uppercase font-semibold px-2 py-0.5 rounded ${
-                                m.paused
-                                  ? "bg-zinc-800 text-zinc-400"
-                                  : m.state === "up"
-                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                  : m.state === "down"
-                                  ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                                  : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                              }`}
-                            >
-                              {m.paused ? "Paused" : m.state}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Monitor Target / Ping URL */}
-                        {m.type === "http" ? (
-                          <div className="mb-4">
-                            <a
-                              href={m.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-xs font-mono text-zinc-400 hover:text-emerald-400 transition-colors flex items-center gap-1.5 truncate"
-                            >
-                              <span className="font-semibold text-zinc-500">{m.method}</span>
-                              <span className="truncate">{m.url}</span>
-                              <ExternalLink className="h-3 w-3 shrink-0 text-zinc-600" />
-                            </a>
-                          </div>
-                        ) : (
-                          <div className="mb-4 bg-zinc-950/60 p-2.5 rounded-xl border border-zinc-800/80">
-                            <div className="flex items-center justify-between mb-1.5">
-                              <span className="text-[11px] font-mono text-zinc-400 flex items-center gap-1">
-                                <Radio className="h-3 w-3 text-emerald-400" />
-                                Ping URL
-                              </span>
-                              <button
-                                onClick={() => copyToClipboard(curlSnippet, m.id)}
-                                className="text-[10px] flex items-center gap-1 text-zinc-400 hover:text-emerald-300 font-mono py-0.5 px-1.5 rounded bg-zinc-900 border border-zinc-800"
+                          {/* Actions Column */}
+                          <td className="py-3 px-4 text-right whitespace-nowrap">
+                            <div className="inline-flex items-center gap-1.5">
+                              <Link
+                                href={`/monitors/${mon.id}`}
+                                title="View telemetry & stats"
+                                className="p-1.5 rounded-lg border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-page)] transition-colors"
                               >
-                                {copiedId === m.id ? (
-                                  <>
-                                    <Check className="h-3 w-3 text-emerald-400" /> Copied curl!
-                                  </>
+                                <BarChart2 className="w-3.5 h-3.5" />
+                              </Link>
+
+                              <button
+                                type="button"
+                                onClick={() => setSelectedMonitorForAlerts(mon)}
+                                title="Alert settings"
+                                className="p-1.5 rounded-lg border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-page)] transition-colors"
+                              >
+                                <Bell className="w-3.5 h-3.5" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePause(mon)}
+                                title={mon.paused ? "Resume" : "Pause"}
+                                className="p-1.5 rounded-lg border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-page)] transition-colors"
+                              >
+                                {mon.paused ? (
+                                  <Play className="w-3.5 h-3.5 text-[var(--status-up)]" />
                                 ) : (
-                                  <>
-                                    <Copy className="h-3 w-3" /> Copy curl
-                                  </>
+                                  <Pause className="w-3.5 h-3.5 text-[var(--status-paused)]" />
                                 )}
                               </button>
-                            </div>
-                            <div className="text-[11px] font-mono text-zinc-500 truncate">{pingUrl}</div>
-                            <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400/80 mt-2 pt-2 border-t border-zinc-800/40">
-                              <span>
-                                {m.lastPingAt
-                                  ? `Last Ping: ${new Date(m.lastPingAt).toLocaleTimeString()}`
-                                  : "Waiting for initial ping"}
-                              </span>
-                              <span className="text-zinc-500">
-                                {m.lastPingAt
-                                  ? new Date(m.lastPingAt).toLocaleDateString()
-                                  : "Never pinged"}
-                              </span>
-                            </div>
-                          </div>
-                        )}
 
-                        {/* Metadata row */}
-                        <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-500 font-mono mb-4">
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-3.5 w-3.5 text-zinc-600" />
-                            {m.type === "http" ? `Every ${m.intervalSec}s` : `Expected every ${m.expectedEverySec}s`}
-                          </div>
-                          {m.type === "http" && <div>Timeout: {m.timeoutMs}ms</div>}
-                          {m.type === "heartbeat" && <div>Grace: {m.graceSec}s</div>}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleDeleteMonitor(mon.id, mon.name)
+                                }
+                                title="Delete monitor"
+                                className="p-1.5 rounded-lg border border-red-500/20 text-red-500 hover:bg-red-500/10 transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* TAB 2: INCIDENTS */}
+        {activeTab === "incidents" && (
+          <section aria-labelledby="incidents-heading" className="space-y-4">
+            <h2 id="incidents-heading" className="text-base font-bold text-[var(--text-primary)]">
+              All incidents
+            </h2>
+
+            {incidents.length === 0 ? (
+              <EmptyState
+                icon={<CheckCircle2 className="w-6 h-6 text-[var(--status-up)]" />}
+                title="Zero active incidents"
+                description="All your services are healthy and passing checks."
+              />
+            ) : (
+              <div className="space-y-3">
+                {incidents.map((inc) => (
+                  <div
+                    key={inc.id}
+                    className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="flex items-center gap-3">
+                      {inc.resolvedAt ? (
+                        <CheckCircle2 className="w-4 h-4 text-[var(--status-up)] shrink-0" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-[var(--status-down)] shrink-0" />
+                      )}
+                      <div>
+                        <div className="font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                          <span>{inc.monitorName}</span>
+                          <span className="font-normal text-[var(--text-secondary)]">
+                            — {inc.cause || "Health check failed"}
+                          </span>
                         </div>
-                      </div>
-
-                      {/* Card Footer Actions */}
-                      <div className="border-t border-zinc-800/60 pt-3 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setSelectedMonitorForStats(m)}
-                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-sky-400 text-xs transition-colors"
-                            title="View Telemetry & Latency Breakdown"
-                          >
-                            <BarChart2 className="h-3.5 w-3.5 text-sky-400" />
-                            <span>Telemetry</span>
-                          </button>
-                          <button
-                            onClick={() => handleOpenAlertsModal(m)}
-                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-emerald-400 text-xs transition-colors"
-                            title="Manage Alert Channels"
-                          >
-                            <Bell className="h-3.5 w-3.5" />
+                        <div className="text-[11px] font-mono text-[var(--text-secondary)] mt-0.5">
+                          Started: {new Date(inc.startedAt).toLocaleString()}
+                          {inc.resolvedAt && (
                             <span>
-                              {m.alertChannels && m.alertChannels.length > 0
-                                ? `${m.alertChannels.length} alert${m.alertChannels.length > 1 ? "s" : ""}`
-                                : "Add alert"}
+                              {" "}
+                              • Resolved:{" "}
+                              {new Date(inc.resolvedAt).toLocaleString()}
                             </span>
-                          </button>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleTogglePause(m)}
-                            className="p-1.5 rounded-lg border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 transition-colors"
-                            title={m.paused ? "Resume Monitor" : "Pause Monitor"}
-                          >
-                            {m.paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
-                          </button>
-                          <button
-                            onClick={() => handleDelete(m.id, m.name)}
-                            className="p-1.5 rounded-lg border border-zinc-800 bg-zinc-900 hover:bg-rose-950/40 hover:border-rose-900/50 text-zinc-400 hover:text-rose-400 transition-colors"
-                            title="Delete Monitor"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          )}
                         </div>
                       </div>
                     </div>
-                  );
-                })}
+
+                    <span
+                      className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase self-start sm:self-auto ${
+                        inc.resolvedAt
+                          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20"
+                          : "bg-red-500/10 text-red-700 dark:text-red-300 border border-red-500/20"
+                      }`}
+                    >
+                      {inc.resolvedAt ? "Resolved" : "Open incident"}
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
-              </>
+          </section>
+        )}
+
+        {/* TAB 3: STATUS PAGES */}
+        {activeTab === "statuspages" && (
+          <section aria-labelledby="statuspages-heading" className="space-y-4">
+            <h2 id="statuspages-heading" className="text-base font-bold text-[var(--text-primary)]">
+              Public status pages
+            </h2>
+
+            {statusPages.length === 0 ? (
+              <EmptyState
+                icon={<Globe className="w-6 h-6" />}
+                title="No status pages created"
+                description="Share live uptime reports with your users using clean public status pages."
+                actionLabel="Create status page"
+                onAction={() => setIsStatusPageModalOpen(true)}
+              />
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {statusPages.map((sp) => (
+                  <div
+                    key={sp.id}
+                    className="p-5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-bold text-[var(--text-primary)] text-sm">
+                        {sp.title}
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteStatusPage(sp.id, sp.title)}
+                        className="text-xs text-red-500 hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </div>
+
+                    {sp.description && (
+                      <p className="text-xs text-[var(--text-secondary)] line-clamp-2">
+                        {sp.description}
+                      </p>
+                    )}
+
+                    <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-xs font-mono">
+                      <span className="text-[var(--text-secondary)]">
+                        {sp.monitorIds.length} monitors
+                      </span>
+                      <Link
+                        href={`/status/${sp.slug}`}
+                        target="_blank"
+                        className="inline-flex items-center gap-1 text-[var(--aubergine-500)] hover:underline font-semibold"
+                      >
+                        <span>/status/{sp.slug}</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
-          </div>
+          </section>
         )}
       </main>
 
-      {/* Create Monitor Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl bg-zinc-900 border border-zinc-800 shadow-2xl p-6">
-            <h2 className="text-xl font-bold tracking-tight mb-4">Create New Monitor</h2>
-
-            {/* Type Switcher Tabs */}
-            <div className="flex rounded-xl bg-zinc-950 p-1 border border-zinc-800 mb-6">
+      {/* CREATE MONITOR MODAL */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-lg rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] p-6 shadow-2xl space-y-6">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+              <h3 className="text-base font-bold text-[var(--text-primary)]">
+                Create new monitor
+              </h3>
               <button
                 type="button"
-                onClick={() => setMonitorType("http")}
-                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
-                  monitorType === "http"
-                    ? "bg-zinc-800 text-zinc-100 shadow"
-                    : "text-zinc-500 hover:text-zinc-300"
-                }`}
+                onClick={() => setIsCreateModalOpen(false)}
+                className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               >
-                HTTP Endpoint
+                Close
               </button>
+            </div>
+            <MonitorForm
+              token={token || ""}
+              submitting={createSubmitting}
+              error={createError}
+              onSubmit={handleCreateSubmit}
+              onCancel={() => setIsCreateModalOpen(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* CREATE STATUS PAGE MODAL */}
+      {isStatusPageModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-lg rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] p-6 shadow-2xl space-y-6">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+              <h3 className="text-base font-bold text-[var(--text-primary)]">
+                Create public status page
+              </h3>
               <button
                 type="button"
-                onClick={() => setMonitorType("heartbeat")}
-                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
-                  monitorType === "heartbeat"
-                    ? "bg-zinc-800 text-zinc-100 shadow"
-                    : "text-zinc-500 hover:text-zinc-300"
-                }`}
+                onClick={() => setIsStatusPageModalOpen(false)}
+                className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               >
-                Heartbeat (Dead Man&apos;s Switch)
+                Close
               </button>
             </div>
 
-            {formError && (
-              <div className="p-3 mb-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>{formError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleCreateMonitor} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1.5">Monitor Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Production API Health"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500 transition-colors"
-                />
-              </div>
-
-              {monitorType === "http" ? (
-                <>
-                  <div className="grid grid-cols-4 gap-2">
-                    <div className="col-span-1">
-                      <label className="block text-xs font-medium text-zinc-300 mb-1.5">Method</label>
-                      <select
-                        value={formMethod}
-                        onChange={(e) => setFormMethod(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-2.5 py-2 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500"
-                      >
-                        <option>GET</option>
-                        <option>POST</option>
-                        <option>HEAD</option>
-                        <option>PUT</option>
-                        <option>PATCH</option>
-                        <option>DELETE</option>
-                      </select>
-                    </div>
-
-                    <div className="col-span-3">
-                      <label className="block text-xs font-medium text-zinc-300 mb-1.5">URL</label>
-                      <input
-                        type="url"
-                        required
-                        placeholder="https://api.domain.com/healthz"
-                        value={formURL}
-                        onChange={(e) => setFormURL(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500 font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-zinc-300 mb-1.5">Interval</label>
-                      <select
-                        value={formInterval}
-                        onChange={(e) => setFormInterval(Number(e.target.value))}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-2.5 py-2 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500"
-                      >
-                        <option value={60}>1 min</option>
-                        <option value={120}>2 min</option>
-                        <option value={300}>5 min</option>
-                        <option value={600}>10 min</option>
-                        <option value={1800}>30 min</option>
-                        <option value={3600}>1 hour</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-zinc-300 mb-1.5">Timeout</label>
-                      <select
-                        value={formTimeout}
-                        onChange={(e) => setFormTimeout(Number(e.target.value))}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-2.5 py-2 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500"
-                      >
-                        <option value={2000}>2s</option>
-                        <option value={5000}>5s</option>
-                        <option value={10000}>10s</option>
-                        <option value={20000}>20s</option>
-                        <option value={30000}>30s</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-zinc-300 mb-1.5">Expected Status</label>
-                      <input
-                        type="number"
-                        value={formExpectedStatus}
-                        onChange={(e) => setFormExpectedStatus(Number(e.target.value))}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500 font-mono"
-                      />
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-300 mb-1.5">Expected Check-in</label>
-                    <select
-                      value={formExpectedEvery}
-                      onChange={(e) => setFormExpectedEvery(Number(e.target.value))}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-2.5 py-2 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500"
-                    >
-                      <option value={300}>Every 5 min</option>
-                      <option value={1800}>Every 30 min</option>
-                      <option value={3600}>Every 1 hour</option>
-                      <option value={21600}>Every 6 hours</option>
-                      <option value={86400}>Every 24 hours</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-300 mb-1.5">Grace Period</label>
-                    <select
-                      value={formGrace}
-                      onChange={(e) => setFormGrace(Number(e.target.value))}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-2.5 py-2 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500"
-                    >
-                      <option value={60}>1 min</option>
-                      <option value={300}>5 min</option>
-                      <option value={600}>10 min</option>
-                      <option value={1800}>30 min</option>
-                    </select>
-                  </div>
+            <form onSubmit={handleCreateStatusPage} className="space-y-4 text-xs">
+              {spError && (
+                <div className="p-3 rounded-lg border border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400">
+                  {spError}
                 </div>
               )}
 
-              <div className="pt-4 flex items-center justify-end gap-3">
+              <div className="space-y-1">
+                <label className="font-semibold block text-[var(--text-primary)]">
+                  Title
+                </label>
+                <input
+                  type="text"
+                  value={spTitle}
+                  onChange={(e) => setSpTitle(e.target.value)}
+                  placeholder="e.g. Acme Production Status"
+                  className="w-full px-3 py-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-page)] text-[var(--text-primary)] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] outline-none"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold block text-[var(--text-primary)]">
+                  Slug (URL pathname)
+                </label>
+                <div className="flex items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-page)] px-3">
+                  <span className="font-mono text-[var(--text-secondary)]">
+                    /status/
+                  </span>
+                  <input
+                    type="text"
+                    value={spSlug}
+                    onChange={(e) => setSpSlug(e.target.value.toLowerCase())}
+                    placeholder="acme-corp"
+                    className="flex-1 py-2 font-mono text-[var(--text-primary)] bg-transparent focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] outline-none"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold block text-[var(--text-primary)]">
+                  Description (optional)
+                </label>
+                <textarea
+                  value={spDesc}
+                  onChange={(e) => setSpDesc(e.target.value)}
+                  placeholder="Real-time uptime status for Acme public API and services."
+                  rows={2}
+                  className="w-full px-3 py-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-page)] text-[var(--text-primary)] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] outline-none"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="font-semibold block text-[var(--text-primary)]">
+                  Included monitors ({spSelectedMonitors.length} selected)
+                </label>
+                <div className="max-h-40 overflow-y-auto space-y-1 border border-[var(--border-subtle)] rounded-lg p-2 bg-[var(--bg-page)]">
+                  {monitors.map((m) => {
+                    const isChecked = spSelectedMonitors.includes(m.id);
+                    return (
+                      <label
+                        key={m.id}
+                        className="flex items-center gap-2 p-1.5 rounded hover:bg-[var(--bg-panel)] cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSpSelectedMonitors((prev) => [...prev, m.id]);
+                            } else {
+                              setSpSelectedMonitors((prev) =>
+                                prev.filter((id) => id !== m.id)
+                              );
+                            }
+                          }}
+                          className="rounded border-[var(--border-subtle)]"
+                        />
+                        <span className="text-xs font-semibold text-[var(--text-primary)] truncate">
+                          {m.name}
+                        </span>
+                        <span className="text-[10px] font-mono text-[var(--text-secondary)] ml-auto uppercase">
+                          {m.type}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-[var(--border-subtle)] flex justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
+                  onClick={() => setIsStatusPageModalOpen(false)}
+                  className="px-4 py-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-panel)] font-semibold text-[var(--text-secondary)]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2 rounded-xl bg-emerald-500 text-zinc-950 font-semibold hover:bg-emerald-400 transition-colors text-xs shadow-[0_0_20px_rgba(16,185,129,0.2)] disabled:opacity-50"
+                  disabled={spSubmitting || !spTitle.trim() || !spSlug.trim()}
+                  className="px-5 py-2 rounded-lg bg-[var(--aubergine-900)] text-[var(--silver-50)] font-semibold hover:bg-[var(--aubergine-700)] disabled:opacity-50"
                 >
-                  {submitting ? "Saving..." : "Create Monitor"}
+                  {spSubmitting ? "Creating..." : "Create page"}
                 </button>
               </div>
             </form>
@@ -1048,69 +996,66 @@ export default function MonitorsPage() {
         </div>
       )}
 
-      {/* Alert Channels Modal */}
+      {/* ALERT CHANNELS MODAL */}
       {selectedMonitorForAlerts && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl bg-zinc-900 border border-zinc-800 shadow-2xl p-6 text-zinc-100">
-            <div className="flex items-center justify-between mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-lg rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] p-6 shadow-2xl space-y-6">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
               <div>
-                <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
-                  <Bell className="h-5 w-5 text-emerald-400" />
-                  Alert Notifications
-                </h2>
-                <p className="text-xs text-zinc-400 mt-0.5 truncate max-w-md">
-                  Configuring channels for <span className="text-zinc-200 font-semibold">{selectedMonitorForAlerts.name}</span>
+                <h3 className="text-base font-bold text-[var(--text-primary)]">
+                  Alert channels: {selectedMonitorForAlerts.name}
+                </h3>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  Receive webhook alerts when consecutive failures exceed threshold.
                 </p>
               </div>
               <button
-                onClick={() => setSelectedMonitorForAlerts(null)}
-                className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+                type="button"
+                onClick={() => {
+                  setSelectedMonitorForAlerts(null);
+                  setTestResult(null);
+                }}
+                className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               >
-                <X className="h-4 w-4" />
+                Close
               </button>
             </div>
 
-            {/* Configured Channels List */}
-            <div className="mb-6">
-              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
-                Active Notification Channels ({selectedMonitorForAlerts.alertChannels?.length || 0})
-              </label>
-
-              {(!selectedMonitorForAlerts.alertChannels || selectedMonitorForAlerts.alertChannels.length === 0) ? (
-                <div className="p-4 rounded-xl bg-zinc-950/60 border border-zinc-800/80 text-center text-xs text-zinc-500">
-                  No alert channels configured yet. Add a Discord webhook, Slack webhook, or Telegram bot below.
-                </div>
+            {/* Existing Channels */}
+            <div className="space-y-2">
+              <span className="text-xs font-semibold text-[var(--text-primary)]">
+                Active webhooks ({selectedMonitorForAlerts.alertChannels.length})
+              </span>
+              {selectedMonitorForAlerts.alertChannels.length === 0 ? (
+                <p className="text-xs text-[var(--text-secondary)] italic">
+                  No alert channels configured yet.
+                </p>
               ) : (
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                <div className="space-y-1.5">
                   {selectedMonitorForAlerts.alertChannels.map((ch, idx) => (
                     <div
                       key={idx}
-                      className="p-3 rounded-xl bg-zinc-950/80 border border-zinc-800/80 flex items-center justify-between gap-3 text-xs"
+                      className="p-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-page)] flex items-center justify-between text-xs"
                     >
-                      <div className="flex items-center gap-2.5 truncate">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase font-mono ${
-                            ch.type === "discord"
-                              ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
-                              : ch.type === "slack"
-                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                              : "bg-sky-500/10 text-sky-400 border border-sky-500/20"
-                          }`}
-                        >
+                      <div className="flex items-center gap-2 truncate">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-[var(--bg-panel)] font-bold uppercase border border-[var(--border-subtle)]">
                           {ch.type}
                         </span>
-                        <span className="font-mono text-zinc-300 truncate text-[11px]" title={ch.target}>
+                        <span className="font-mono text-[var(--text-secondary)] truncate">
                           {ch.target}
                         </span>
                       </div>
-
                       <button
-                        onClick={() => handleDeleteAlertChannel(idx)}
-                        disabled={savingAlerts}
-                        className="p-1 rounded-md text-zinc-500 hover:text-rose-400 hover:bg-rose-950/30 transition-colors shrink-0"
-                        title="Remove alert channel"
+                        type="button"
+                        onClick={() => {
+                          const updated = selectedMonitorForAlerts.alertChannels.filter(
+                            (_, i) => i !== idx
+                          );
+                          handleSaveAlertChannels(updated);
+                        }}
+                        className="text-xs text-red-500 hover:underline ml-2"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        Remove
                       </button>
                     </div>
                   ))}
@@ -1118,271 +1063,82 @@ export default function MonitorsPage() {
               )}
             </div>
 
-            {/* Add Channel Form */}
-            <div className="border-t border-zinc-800 pt-5">
-              <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-3">
-                Add New Alert Channel
-              </h3>
-
-              {/* Type Switcher */}
-              <div className="grid grid-cols-3 gap-2 mb-3">
-                {(["discord", "slack", "telegram"] as const).map((type) => (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => {
-                      setNewChannelType(type);
-                      setTestResult(null);
-                    }}
-                    className={`py-2 px-3 rounded-xl text-xs font-semibold capitalize transition-all border ${
-                      newChannelType === type
-                        ? "bg-zinc-800 text-zinc-100 border-zinc-600 shadow"
-                        : "bg-zinc-950/60 text-zinc-500 border-zinc-800 hover:text-zinc-300"
-                    }`}
-                  >
-                    {type}
-                  </button>
-                ))}
-              </div>
-
-              {/* Target Input */}
-              <div className="space-y-1.5 mb-3">
-                <label className="block text-xs font-medium text-zinc-400">
-                  {newChannelType === "discord"
-                    ? "Discord Webhook URL"
-                    : newChannelType === "slack"
-                    ? "Slack Incoming Webhook URL"
-                    : "Telegram Target (<bot_token>:<chat_id> or <chat_id>)"}
-                </label>
+            {/* Add Channel */}
+            <div className="pt-3 border-t border-[var(--border-subtle)] space-y-3">
+              <span className="text-xs font-semibold text-[var(--text-primary)]">
+                Add new webhook channel
+              </span>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <select
+                  value={newChannelType}
+                  onChange={(e) =>
+                    setNewChannelType(
+                      e.target.value as "discord" | "slack" | "telegram"
+                    )
+                  }
+                  className="px-3 py-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-page)] text-xs text-[var(--text-primary)]"
+                >
+                  <option value="discord">Discord</option>
+                  <option value="slack">Slack</option>
+                  <option value="telegram">Telegram</option>
+                </select>
                 <input
                   type="text"
-                  required
-                  placeholder={
-                    newChannelType === "discord"
-                      ? "https://discord.com/api/webhooks/..."
-                      : newChannelType === "slack"
-                      ? "https://hooks.slack.com/services/..."
-                      : "123456789:ABCdef_gh:987654321"
-                  }
                   value={newChannelTarget}
-                  onChange={(e) => {
-                    setNewChannelTarget(e.target.value);
-                    setTestResult(null);
-                  }}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs font-mono text-zinc-100 focus:outline-none focus:border-emerald-500 transition-colors"
+                  onChange={(e) => setNewChannelTarget(e.target.value)}
+                  placeholder="Webhook URL or Chat ID..."
+                  className="flex-1 px-3 py-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-page)] text-xs font-mono text-[var(--text-primary)] placeholder-[var(--text-secondary)]"
                 />
               </div>
 
-              {/* Live Test Notification Feedback Banner */}
-              {testResult && (
-                <div
-                  className={`p-3 mb-3 rounded-xl border text-xs flex items-center gap-2 ${
-                    testResult.ok
-                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                      : "bg-rose-500/10 border-rose-500/30 text-rose-400"
-                  }`}
-                >
-                  {testResult.ok ? (
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                  ) : (
-                    <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
-                  )}
-                  <span>{testResult.message}</span>
-                </div>
-              )}
-
-              {/* Actions: Send Test Notification & Add Channel */}
-              <div className="flex items-center justify-between gap-3 pt-2">
+              <div className="flex items-center justify-between">
                 <button
                   type="button"
                   onClick={handleTestAlertChannel}
                   disabled={testingAlert || !newChannelTarget.trim()}
-                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-panel)] text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-page)] disabled:opacity-50 transition-colors"
                 >
-                  <Send className={`h-3.5 w-3.5 ${testingAlert ? "animate-spin" : ""}`} />
-                  {testingAlert ? "Testing..." : "Send Test Notification"}
+                  {testingAlert ? "Testing..." : "Send test webhook"}
                 </button>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedMonitorForAlerts(null)}
-                    className="px-3.5 py-2 rounded-xl text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
-                  >
-                    Done
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleAddAlertChannel}
-                    disabled={savingAlerts || !newChannelTarget.trim()}
-                    className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-xl bg-emerald-500 text-zinc-950 hover:bg-emerald-400 transition-colors shadow-[0_0_15px_rgba(16,185,129,0.2)] disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    {savingAlerts ? "Saving..." : "Add Channel"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Telemetry & Stats Modal */}
-      {selectedMonitorForStats && token && (
-        <MonitorStatsModal
-          monitor={selectedMonitorForStats}
-          token={token}
-          onClose={() => setSelectedMonitorForStats(null)}
-        />
-      )}
-
-      {/* Create Status Page Modal */}
-      {isStatusPageModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-          <div className="w-full max-w-lg rounded-2xl bg-zinc-900 border border-zinc-800 shadow-2xl p-6 my-auto">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-                  <Globe className="h-5 w-5" />
-                </div>
-                <h2 className="text-xl font-bold tracking-tight">Create Status Page</h2>
-              </div>
-              <button
-                onClick={() => setIsStatusPageModalOpen(false)}
-                className="p-1.5 rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200 transition-colors"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            {spError && (
-              <div className="p-3 mb-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>{spError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleCreateStatusPage} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
-                  Page Title
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Acme Production Services"
-                  value={spTitle}
-                  onChange={(e) => setSpTitle(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 focus:border-emerald-500/60 focus:outline-none focus:ring-1 focus:ring-emerald-500/60 text-sm text-zinc-100 transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
-                  URL Slug
-                </label>
-                <div className="flex rounded-xl bg-zinc-950 border border-zinc-800 focus-within:border-emerald-500/60 focus-within:ring-1 focus-within:ring-emerald-500/60 overflow-hidden">
-                  <span className="px-3 py-2.5 bg-zinc-900 border-r border-zinc-800 text-xs font-mono text-zinc-500 select-none">
-                    /status/
-                  </span>
-                  <input
-                    type="text"
-                    required
-                    placeholder="my-company"
-                    value={spSlug}
-                    onChange={(e) => setSpSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
-                    className="flex-1 px-3 py-2.5 bg-transparent focus:outline-none text-sm font-mono text-zinc-100"
-                  />
-                </div>
-                <p className="text-[11px] font-mono text-zinc-500 mt-1">
-                  Preview: /status/{spSlug || "your-slug"} (3-50 lowercase chars & hyphens)
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
-                  Description (Optional)
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Real-time uptime and incident tracking for our customer-facing APIs."
-                  value={spDesc}
-                  onChange={(e) => setSpDesc(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-zinc-950 border border-zinc-800 focus:border-emerald-500/60 focus:outline-none focus:ring-1 focus:ring-emerald-500/60 text-sm text-zinc-100 transition-colors resize-none"
-                />
-              </div>
-
-              {/* Include Monitors Checkbox list */}
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
-                  Include Monitors ({spSelectedMonitors.length} selected)
-                </label>
-                {monitors.length === 0 ? (
-                  <p className="text-xs text-zinc-500 italic">No monitors created yet.</p>
-                ) : (
-                  <div className="max-h-40 overflow-y-auto space-y-1.5 p-2 rounded-xl bg-zinc-950 border border-zinc-800">
-                    {monitors.map((m) => {
-                      const isChecked = spSelectedMonitors.includes(m.id);
-                      return (
-                        <label
-                          key={m.id}
-                          className="flex items-center gap-2.5 p-1.5 rounded-lg hover:bg-zinc-900 cursor-pointer text-xs select-none"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSpSelectedMonitors([...spSelectedMonitors, m.id]);
-                              } else {
-                                setSpSelectedMonitors(spSelectedMonitors.filter((id) => id !== m.id));
-                              }
-                            }}
-                            className="rounded border-zinc-700 text-emerald-500 focus:ring-emerald-500/40"
-                          />
-                          <span className="font-semibold text-zinc-200">{m.name}</span>
-                          <span className="text-[10px] font-mono uppercase text-zinc-500">({m.type})</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Public Toggle */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-950 border border-zinc-800">
-                <div>
-                  <span className="text-xs font-semibold text-zinc-200 block">Public Status Page</span>
-                  <span className="text-[11px] text-zinc-500">
-                    Anyone with the link can view your status page without logging in.
-                  </span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={spPublic}
-                  onChange={(e) => setSpPublic(e.target.checked)}
-                  className="h-4 w-4 rounded border-zinc-700 text-emerald-500 focus:ring-emerald-500/40"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-800/80">
                 <button
                   type="button"
-                  onClick={() => setIsStatusPageModalOpen(false)}
-                  className="px-4 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
+                  onClick={() => {
+                    if (!newChannelTarget.trim()) return;
+                    const next = [
+                      ...selectedMonitorForAlerts.alertChannels,
+                      {
+                        type: newChannelType,
+                        target: newChannelTarget.trim(),
+                      },
+                    ];
+                    handleSaveAlertChannels(next);
+                    setNewChannelTarget("");
+                  }}
+                  disabled={!newChannelTarget.trim() || savingAlerts}
+                  className="px-4 py-1.5 rounded-lg bg-[var(--aubergine-500)] text-[var(--silver-50)] text-xs font-semibold hover:bg-[var(--aubergine-700)] disabled:opacity-50"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={spSubmitting || !spTitle.trim() || !spSlug.trim()}
-                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-500 text-zinc-950 text-xs font-semibold hover:bg-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(16,185,129,0.2)]"
-                >
-                  <Plus className="h-4 w-4" />
-                  {spSubmitting ? "Creating..." : "Create Status Page"}
+                  {savingAlerts ? "Saving..." : "Add channel"}
                 </button>
               </div>
-            </form>
+
+              {testResult && (
+                <div
+                  className={`p-2.5 rounded-lg text-xs flex items-center gap-2 ${
+                    testResult.ok
+                      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20"
+                      : "bg-red-500/10 text-red-700 dark:text-red-300 border border-red-500/20"
+                  }`}
+                >
+                  {testResult.ok ? (
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                  )}
+                  <span>{testResult.message}</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
