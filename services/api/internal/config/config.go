@@ -15,6 +15,7 @@ type Config struct {
 	StoreType          string // "firestore" or "memory"
 	AllowedOrigins     string
 	Environment        string
+	TelegramBotToken   string
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -28,6 +29,7 @@ func Load() *Config {
 		StoreType:          getEnv("STORE_TYPE", "memory"),
 		AllowedOrigins:     getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000"),
 		Environment:        getEnv("PULSE_ENV", "development"),
+		TelegramBotToken:   getEnv("TELEGRAM_BOT_TOKEN", ""),
 	}
 }
 

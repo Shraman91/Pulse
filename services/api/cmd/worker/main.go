@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"pulse/internal/alerts"
 	"pulse/internal/checker"
 	"pulse/internal/config"
 	"pulse/internal/scheduler"
@@ -41,10 +42,15 @@ func main() {
 	// Checker with zero-trust SSRF protection
 	chk := checker.NewChecker()
 
+	// Alert dispatcher (asynchronous worker pool with exponential backoff)
+	dispatcher := alerts.NewDispatcher(nil, cfg.TelegramBotToken, 5, 500, alerts.DefaultRetryConfig)
+	defer dispatcher.Close()
+
 	// Scheduler with worker pool
 	sched := scheduler.New(st, chk,
 		scheduler.WithWorkers(cfg.WorkerConcurrency),
 		scheduler.WithTickInterval(time.Duration(cfg.CheckIntervalSec)*time.Second),
+		scheduler.WithAlertHandler(dispatcher.Dispatch),
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())

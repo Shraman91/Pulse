@@ -20,9 +20,13 @@ import {
   Server,
   Zap,
   Flame,
+  Bell,
+  Send,
+  CheckCircle2,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { api, Monitor, Incident, CreateMonitorPayload } from "@/lib/api";
+import { api, Monitor, Incident, CreateMonitorPayload, AlertChannel } from "@/lib/api";
 
 export default function MonitorsPage() {
   const { user, token, loading: authLoading, signInWithGoogle, signInWithGithub, signInDev, signOut } = useAuth();
@@ -49,6 +53,14 @@ export default function MonitorsPage() {
 
   // Copied Ping Token State
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Alert Channels Modal State
+  const [selectedMonitorForAlerts, setSelectedMonitorForAlerts] = useState<Monitor | null>(null);
+  const [newChannelType, setNewChannelType] = useState<"discord" | "slack" | "telegram">("discord");
+  const [newChannelTarget, setNewChannelTarget] = useState("");
+  const [testingAlert, setTestingAlert] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [savingAlerts, setSavingAlerts] = useState(false);
 
   const fetchMonitors = async () => {
     if (!token) return;
@@ -139,6 +151,81 @@ export default function MonitorsPage() {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleOpenAlertsModal = (m: Monitor) => {
+    setSelectedMonitorForAlerts(m);
+    setNewChannelType("discord");
+    setNewChannelTarget("");
+    setTestResult(null);
+  };
+
+  const handleTestAlertChannel = async () => {
+    if (!token || !selectedMonitorForAlerts || !newChannelTarget.trim()) return;
+    setTestingAlert(true);
+    setTestResult(null);
+    try {
+      const res = await api.testAlertChannel(
+        token,
+        { type: newChannelType, target: newChannelTarget.trim() },
+        selectedMonitorForAlerts.name
+      );
+      if (res.ok) {
+        setTestResult({ ok: true, message: res.message || "Test notification delivered successfully!" });
+      } else {
+        setTestResult({ ok: false, message: res.error || "Failed to deliver test notification." });
+      }
+    } catch (err: unknown) {
+      setTestResult({
+        ok: false,
+        message: err instanceof Error ? err.message : "Failed to deliver test notification.",
+      });
+    } finally {
+      setTestingAlert(false);
+    }
+  };
+
+  const handleAddAlertChannel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token || !selectedMonitorForAlerts || !newChannelTarget.trim()) return;
+    setSavingAlerts(true);
+    const updatedChannels: AlertChannel[] = [
+      ...(selectedMonitorForAlerts.alertChannels || []),
+      { type: newChannelType, target: newChannelTarget.trim() },
+    ];
+    try {
+      const updated = await api.updateMonitor(token, selectedMonitorForAlerts.id, {
+        alertChannels: updatedChannels,
+      });
+      setSelectedMonitorForAlerts(updated);
+      setMonitors((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+      setNewChannelTarget("");
+      setTestResult(null);
+    } catch (err: unknown) {
+      setTestResult({
+        ok: false,
+        message: err instanceof Error ? err.message : "Failed to save alert channel.",
+      });
+    } finally {
+      setSavingAlerts(false);
+    }
+  };
+
+  const handleDeleteAlertChannel = async (index: number) => {
+    if (!token || !selectedMonitorForAlerts) return;
+    setSavingAlerts(true);
+    const updatedChannels = (selectedMonitorForAlerts.alertChannels || []).filter((_, i) => i !== index);
+    try {
+      const updated = await api.updateMonitor(token, selectedMonitorForAlerts.id, {
+        alertChannels: updatedChannels,
+      });
+      setSelectedMonitorForAlerts(updated);
+      setMonitors((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to remove alert channel.");
+    } finally {
+      setSavingAlerts(false);
+    }
   };
 
   const resetForm = () => {
@@ -521,7 +608,20 @@ export default function MonitorsPage() {
 
                       {/* Card Footer Actions */}
                       <div className="border-t border-zinc-800/60 pt-3 flex items-center justify-between">
-                        <span className="text-[11px] font-mono text-zinc-600">ID: {m.id}</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleOpenAlertsModal(m)}
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-emerald-400 text-xs transition-colors"
+                            title="Manage Alert Channels"
+                          >
+                            <Bell className="h-3.5 w-3.5" />
+                            <span>
+                              {m.alertChannels && m.alertChannels.length > 0
+                                ? `${m.alertChannels.length} alert${m.alertChannels.length > 1 ? "s" : ""}`
+                                : "Add alert"}
+                            </span>
+                          </button>
+                        </div>
 
                         <div className="flex items-center gap-2">
                           <button
@@ -728,6 +828,185 @@ export default function MonitorsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Alert Channels Modal */}
+      {selectedMonitorForAlerts && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl bg-zinc-900 border border-zinc-800 shadow-2xl p-6 text-zinc-100">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
+                  <Bell className="h-5 w-5 text-emerald-400" />
+                  Alert Notifications
+                </h2>
+                <p className="text-xs text-zinc-400 mt-0.5 truncate max-w-md">
+                  Configuring channels for <span className="text-zinc-200 font-semibold">{selectedMonitorForAlerts.name}</span>
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedMonitorForAlerts(null)}
+                className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Configured Channels List */}
+            <div className="mb-6">
+              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+                Active Notification Channels ({selectedMonitorForAlerts.alertChannels?.length || 0})
+              </label>
+
+              {(!selectedMonitorForAlerts.alertChannels || selectedMonitorForAlerts.alertChannels.length === 0) ? (
+                <div className="p-4 rounded-xl bg-zinc-950/60 border border-zinc-800/80 text-center text-xs text-zinc-500">
+                  No alert channels configured yet. Add a Discord webhook, Slack webhook, or Telegram bot below.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {selectedMonitorForAlerts.alertChannels.map((ch, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3 rounded-xl bg-zinc-950/80 border border-zinc-800/80 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="flex items-center gap-2.5 truncate">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase font-mono ${
+                            ch.type === "discord"
+                              ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
+                              : ch.type === "slack"
+                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                              : "bg-sky-500/10 text-sky-400 border border-sky-500/20"
+                          }`}
+                        >
+                          {ch.type}
+                        </span>
+                        <span className="font-mono text-zinc-300 truncate text-[11px]" title={ch.target}>
+                          {ch.target}
+                        </span>
+                      </div>
+
+                      <button
+                        onClick={() => handleDeleteAlertChannel(idx)}
+                        disabled={savingAlerts}
+                        className="p-1 rounded-md text-zinc-500 hover:text-rose-400 hover:bg-rose-950/30 transition-colors shrink-0"
+                        title="Remove alert channel"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Add Channel Form */}
+            <div className="border-t border-zinc-800 pt-5">
+              <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-3">
+                Add New Alert Channel
+              </h3>
+
+              {/* Type Switcher */}
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                {(["discord", "slack", "telegram"] as const).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => {
+                      setNewChannelType(type);
+                      setTestResult(null);
+                    }}
+                    className={`py-2 px-3 rounded-xl text-xs font-semibold capitalize transition-all border ${
+                      newChannelType === type
+                        ? "bg-zinc-800 text-zinc-100 border-zinc-600 shadow"
+                        : "bg-zinc-950/60 text-zinc-500 border-zinc-800 hover:text-zinc-300"
+                    }`}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+
+              {/* Target Input */}
+              <div className="space-y-1.5 mb-3">
+                <label className="block text-xs font-medium text-zinc-400">
+                  {newChannelType === "discord"
+                    ? "Discord Webhook URL"
+                    : newChannelType === "slack"
+                    ? "Slack Incoming Webhook URL"
+                    : "Telegram Target (<bot_token>:<chat_id> or <chat_id>)"}
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder={
+                    newChannelType === "discord"
+                      ? "https://discord.com/api/webhooks/..."
+                      : newChannelType === "slack"
+                      ? "https://hooks.slack.com/services/..."
+                      : "123456789:ABCdef_gh:987654321"
+                  }
+                  value={newChannelTarget}
+                  onChange={(e) => {
+                    setNewChannelTarget(e.target.value);
+                    setTestResult(null);
+                  }}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs font-mono text-zinc-100 focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+              </div>
+
+              {/* Live Test Notification Feedback Banner */}
+              {testResult && (
+                <div
+                  className={`p-3 mb-3 rounded-xl border text-xs flex items-center gap-2 ${
+                    testResult.ok
+                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                      : "bg-rose-500/10 border-rose-500/30 text-rose-400"
+                  }`}
+                >
+                  {testResult.ok ? (
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+                  )}
+                  <span>{testResult.message}</span>
+                </div>
+              )}
+
+              {/* Actions: Send Test Notification & Add Channel */}
+              <div className="flex items-center justify-between gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleTestAlertChannel}
+                  disabled={testingAlert || !newChannelTarget.trim()}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Send className={`h-3.5 w-3.5 ${testingAlert ? "animate-spin" : ""}`} />
+                  {testingAlert ? "Testing..." : "Send Test Notification"}
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMonitorForAlerts(null)}
+                    className="px-3.5 py-2 rounded-xl text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
+                  >
+                    Done
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddAlertChannel}
+                    disabled={savingAlerts || !newChannelTarget.trim()}
+                    className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-xl bg-emerald-500 text-zinc-950 hover:bg-emerald-400 transition-colors shadow-[0_0_15px_rgba(16,185,129,0.2)] disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    {savingAlerts ? "Saving..." : "Add Channel"}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

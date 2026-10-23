@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"pulse/internal/alerts"
 	"pulse/internal/auth"
 	"pulse/internal/config"
 	"pulse/internal/httpx"
@@ -44,6 +45,9 @@ func main() {
 
 	// Handler initialization
 	monitorsHandler := monitors.NewHandler(st)
+	alertsDispatcher := alerts.NewDispatcher(nil, cfg.TelegramBotToken, 2, 50, alerts.DefaultRetryConfig)
+	defer alertsDispatcher.Close()
+	alertsHandler := alerts.NewHandler(alertsDispatcher)
 
 	mux := http.NewServeMux()
 
@@ -56,13 +60,14 @@ func main() {
 		})
 	})
 
-	// Protected monitor CRUD routes
+	// Protected monitor CRUD & incident routes
 	mux.Handle("POST /api/monitors", authMw(http.HandlerFunc(monitorsHandler.Create)))
 	mux.Handle("GET /api/monitors", authMw(http.HandlerFunc(monitorsHandler.List)))
 	mux.Handle("GET /api/monitors/{id}", authMw(http.HandlerFunc(monitorsHandler.Get)))
 	mux.Handle("PATCH /api/monitors/{id}", authMw(http.HandlerFunc(monitorsHandler.Update)))
 	mux.Handle("DELETE /api/monitors/{id}", authMw(http.HandlerFunc(monitorsHandler.Delete)))
 	mux.Handle("GET /api/incidents", authMw(http.HandlerFunc(monitorsHandler.ListIncidents)))
+	mux.Handle("POST /api/alerts/test", authMw(http.HandlerFunc(alertsHandler.TestAlert)))
 
 	handler := httpx.WithCORS(cfg.AllowedOrigins, mux)
 

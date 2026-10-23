@@ -126,4 +126,15 @@ export const api = {
   getIncidents: async (token: string): Promise<Incident[]> => {
     return fetchWithAuth("/api/incidents", token);
   },
+
+  testAlertChannel: async (
+    token: string,
+    channel: AlertChannel,
+    monitorName?: string
+  ): Promise<{ ok: boolean; message?: string; error?: string }> => {
+    return fetchWithAuth("/api/alerts/test", token, {
+      method: "POST",
+      body: JSON.stringify({ channel, monitorName }),
+    });
+  },
 };

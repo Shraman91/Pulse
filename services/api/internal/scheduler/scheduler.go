@@ -63,6 +63,13 @@ func WithStateMachine(sm *incidents.StateMachine) Option {
 	}
 }
 
+// WithAlertHandler sets an alert handler callback on the default state machine.
+func WithAlertHandler(handler incidents.AlertHandler) Option {
+	return func(s *Scheduler) {
+		s.stateMachine = incidents.NewStateMachine(s.store, incidents.RealClock{}, handler)
+	}
+}
+
 // Scheduler coordinates the discovery of due monitors, atomic distributed leasing,
 // and execution via a fixed worker pool.
 type Scheduler struct {
