@@ -62,6 +62,7 @@ func main() {
 	mux.Handle("GET /api/monitors/{id}", authMw(http.HandlerFunc(monitorsHandler.Get)))
 	mux.Handle("PATCH /api/monitors/{id}", authMw(http.HandlerFunc(monitorsHandler.Update)))
 	mux.Handle("DELETE /api/monitors/{id}", authMw(http.HandlerFunc(monitorsHandler.Delete)))
+	mux.Handle("GET /api/incidents", authMw(http.HandlerFunc(monitorsHandler.ListIncidents)))
 
 	handler := httpx.WithCORS(cfg.AllowedOrigins, mux)
 

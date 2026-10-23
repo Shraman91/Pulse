@@ -2,6 +2,7 @@ package monitors
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -25,6 +26,7 @@ func TestMonitorHandlers(t *testing.T) {
 	mux.HandleFunc("GET /api/monitors/{id}", h.Get)
 	mux.HandleFunc("PATCH /api/monitors/{id}", h.Update)
 	mux.HandleFunc("DELETE /api/monitors/{id}", h.Delete)
+	mux.HandleFunc("GET /api/incidents", h.ListIncidents)
 
 	server := mw(mux)
 
@@ -217,6 +219,33 @@ func TestMonitorHandlers(t *testing.T) {
 		server.ServeHTTP(recDel, reqDel)
 		if recDel.Code != http.StatusOK {
 			t.Fatalf("expected 200 for DELETE, got %d", recDel.Code)
+		}
+	})
+
+	t.Run("list incidents returns incidents for authenticated user", func(t *testing.T) {
+		// Seed incident
+		inc := &store.Incident{
+			ID:          "inc_test_1",
+			MonitorID:   "mon_100",
+			MonitorName: "Test Target",
+			OwnerUID:    "user_inc",
+			Cause:       "connection refused",
+		}
+		_ = st.CreateIncident(context.Background(), inc)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/incidents", nil)
+		req.Header.Set("Authorization", "Bearer dev:user_inc:user@pulse.dev")
+		rec := httptest.NewRecorder()
+		server.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 for GET /api/incidents, got %d", rec.Code)
+		}
+
+		var incidents []*store.Incident
+		_ = json.Unmarshal(rec.Body.Bytes(), &incidents)
+		if len(incidents) != 1 || incidents[0].ID != "inc_test_1" {
+			t.Errorf("expected 1 incident returned, got %v", incidents)
 		}
 	})
 }

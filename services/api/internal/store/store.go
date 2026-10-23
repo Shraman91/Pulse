@@ -24,4 +24,15 @@ type Store interface {
 	// Heartbeat operations
 	GetMonitorByPingToken(ctx context.Context, token string) (*Monitor, error)
 	RecordHeartbeatPing(ctx context.Context, id string, pingTime time.Time) error
+
+	// Incident operations
+	CreateIncident(ctx context.Context, inc *Incident) error
+	GetActiveIncident(ctx context.Context, monitorID string) (*Incident, error)
+	ResolveIncident(ctx context.Context, incidentID string, resolvedAt time.Time) error
+	ListIncidentsByOwner(ctx context.Context, ownerUID string, limit int) ([]*Incident, error)
+	ListIncidentsByMonitor(ctx context.Context, monitorID string, limit int) ([]*Incident, error)
+
+	// Check failure operations (failures only, 30-day TTL)
+	RecordCheckFailure(ctx context.Context, check *CheckFailure) error
+	ListCheckFailures(ctx context.Context, monitorID string, limit int) ([]*CheckFailure, error)
 }

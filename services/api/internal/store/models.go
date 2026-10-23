@@ -6,10 +6,11 @@ import (
 )
 
 var (
-	ErrNotFound      = errors.New("not found")
-	ErrUnauthorized  = errors.New("unauthorized access")
-	ErrQuotaExceeded = errors.New("monitor quota limit reached (max 10)")
-	ErrInvalidInput  = errors.New("invalid monitor input")
+	ErrNotFound       = errors.New("not found")
+	ErrUnauthorized   = errors.New("unauthorized access")
+	ErrQuotaExceeded  = errors.New("monitor quota limit reached (max 10)")
+	ErrInvalidInput   = errors.New("invalid monitor input")
+	ErrLeaseContested = errors.New("monitor lease already acquired by another worker")
 )
 
 type MonitorType string
@@ -67,4 +68,29 @@ type UpdateMonitorRequest struct {
 	GraceSec         *int            `json:"graceSec,omitempty"`
 	Paused           *bool           `json:"paused,omitempty"`
 	AlertChannels    *[]AlertChannel `json:"alertChannels,omitempty"`
+}
+
+type Incident struct {
+	ID              string     `json:"id" firestore:"id"`
+	MonitorID       string     `json:"monitorId" firestore:"monitorId"`
+	MonitorName     string     `json:"monitorName" firestore:"monitorName"`
+	OwnerUID        string     `json:"ownerUid" firestore:"ownerUid"`
+	StartedAt       time.Time  `json:"startedAt" firestore:"startedAt"`
+	ResolvedAt      *time.Time `json:"resolvedAt,omitempty" firestore:"resolvedAt,omitempty"`
+	Cause           string     `json:"cause" firestore:"cause"`
+	AlertDispatched bool       `json:"alertDispatched" firestore:"alertDispatched"`
+}
+
+type CheckFailure struct {
+	ID             string    `json:"id" firestore:"id"`
+	MonitorID      string    `json:"monitorId" firestore:"monitorId"`
+	TS             time.Time `json:"ts" firestore:"ts"`
+	OK             bool      `json:"ok" firestore:"ok"`
+	StatusCode     int       `json:"statusCode" firestore:"statusCode"`
+	LatencyMs      int64     `json:"latencyMs" firestore:"latencyMs"`
+	Error          string    `json:"error" firestore:"error"`
+	DNSMs          int64     `json:"dnsMs" firestore:"dnsMs"`
+	ConnectMs      int64     `json:"connectMs" firestore:"connectMs"`
+	TLSHandshakeMs int64     `json:"tlsMs" firestore:"tlsMs"`
+	TTFBMs         int64     `json:"ttfbMs" firestore:"ttfbMs"`
 }

@@ -235,6 +235,26 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ListIncidents handles GET /api/incidents
+func (h *Handler) ListIncidents(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.GetUser(r.Context())
+	if !ok || user == nil {
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	incidents, err := h.store.ListIncidentsByOwner(r.Context(), user.UID, 50)
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "failed to list incidents", err.Error())
+		return
+	}
+	if incidents == nil {
+		incidents = []*store.Incident{}
+	}
+
+	httpx.JSON(w, http.StatusOK, incidents)
+}
+
 func validateHTTPConfig(req CreateMonitorRequest, m *store.Monitor) error {
 	rawURL := strings.TrimSpace(req.URL)
 	if rawURL == "" {

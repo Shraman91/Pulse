@@ -8,7 +8,10 @@ import (
 	"syscall"
 	"time"
 
+	"pulse/internal/checker"
 	"pulse/internal/config"
+	"pulse/internal/scheduler"
+	"pulse/internal/store"
 )
 
 func main() {
@@ -25,33 +28,39 @@ func main() {
 		"env", cfg.Environment,
 	)
 
+	// Persistence store
+	var st store.Store
+	if cfg.StoreType == "memory" {
+		st = store.NewMemoryStore()
+		slog.Info("using in-memory store adapter")
+	} else {
+		st = store.NewMemoryStore()
+		slog.Info("store initialized", "type", cfg.StoreType)
+	}
+
+	// Checker with zero-trust SSRF protection
+	chk := checker.NewChecker()
+
+	// Scheduler with worker pool
+	sched := scheduler.New(st, chk,
+		scheduler.WithWorkers(cfg.WorkerConcurrency),
+		scheduler.WithTickInterval(time.Duration(cfg.CheckIntervalSec)*time.Second),
+	)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Capture OS interrupt signals
+	// OS interrupt signals (Rule 5: shut down gracefully on SIGTERM)
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
-	ticker := time.NewTicker(time.Duration(cfg.CheckIntervalSec) * time.Second)
-	defer ticker.Stop()
+	go func() {
+		sig := <-quit
+		slog.Info("received termination signal, initiating graceful drain...", "signal", sig.String())
+		cancel()
+	}()
 
-	slog.Info("scheduler loop initialized and ready")
-
-	for {
-		select {
-		case <-ctx.Done():
-			slog.Info("worker context cancelled, exiting scheduler loop")
-			return
-		case sig := <-quit:
-			slog.Info("received shutdown signal", "signal", sig.String())
-			cancel()
-			// Simulating grace period for active tasks
-			slog.Info("waiting for in-flight worker tasks to drain...")
-			time.Sleep(500 * time.Millisecond)
-			slog.Info("worker service stopped cleanly")
-			return
-		case t := <-ticker.C:
-			slog.Debug("scheduler heartbeat tick", "time", t.UTC().Format(time.RFC3339))
-		}
-	}
+	// Start scheduler and worker pool (blocks until context is cancelled)
+	sched.Start(ctx)
+	slog.Info("Pulse Worker terminated cleanly")
 }

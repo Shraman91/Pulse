@@ -83,6 +83,17 @@ async function fetchWithAuth(url: string, token: string, options: RequestInit = 
   return res.json();
 }
 
+export interface Incident {
+  id: string;
+  monitorId: string;
+  monitorName: string;
+  ownerUid: string;
+  startedAt: string;
+  resolvedAt?: string | null;
+  cause: string;
+  alertDispatched: boolean;
+}
+
 export const api = {
   getMonitors: async (token: string): Promise<Monitor[]> => {
     return fetchWithAuth("/api/monitors", token);
@@ -110,5 +121,9 @@ export const api = {
     return fetchWithAuth(`/api/monitors/${id}`, token, {
       method: "DELETE",
     });
+  },
+
+  getIncidents: async (token: string): Promise<Incident[]> => {
+    return fetchWithAuth("/api/incidents", token);
   },
 };

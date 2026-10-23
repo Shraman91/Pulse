@@ -19,14 +19,17 @@ import {
   AlertCircle,
   Server,
   Zap,
+  Flame,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { api, Monitor, CreateMonitorPayload } from "@/lib/api";
+import { api, Monitor, Incident, CreateMonitorPayload } from "@/lib/api";
 
 export default function MonitorsPage() {
   const { user, token, loading: authLoading, signInWithGoogle, signInWithGithub, signInDev, signOut } = useAuth();
 
   const [monitors, setMonitors] = useState<Monitor[]>([]);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [activeTab, setActiveTab] = useState<"monitors" | "incidents">("monitors");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,8 +55,12 @@ export default function MonitorsPage() {
     try {
       setLoading(true);
       setError(null);
-      const data = await api.getMonitors(token);
-      setMonitors(data);
+      const [monData, incData] = await Promise.all([
+        api.getMonitors(token),
+        api.getIncidents(token).catch(() => []),
+      ]);
+      setMonitors(monData);
+      setIncidents(incData);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to load monitors";
       setError(msg);
@@ -285,6 +292,55 @@ export default function MonitorsPage() {
               </div>
             </div>
 
+            {/* Active Incidents Banner */}
+            {incidents.filter((inc) => !inc.resolvedAt).length > 0 && (
+              <div className="mb-6 p-4 rounded-2xl bg-rose-950/40 border border-rose-900/60 shadow-[0_0_20px_rgba(244,63,94,0.1)]">
+                <div className="flex items-center gap-2 text-sm font-semibold text-rose-400 mb-2">
+                  <Flame className="h-4 w-4 animate-pulse text-rose-500" />
+                  Active Outage Detected ({incidents.filter((inc) => !inc.resolvedAt).length})
+                </div>
+                <div className="space-y-1.5">
+                  {incidents
+                    .filter((inc) => !inc.resolvedAt)
+                    .map((inc) => (
+                      <div
+                        key={inc.id}
+                        className="text-xs bg-rose-950/60 border border-rose-900/40 rounded-xl px-3 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-rose-200"
+                      >
+                        <span className="font-semibold text-rose-300">{inc.monitorName}: <span className="font-normal text-rose-400/90">{inc.cause}</span></span>
+                        <span className="font-mono text-[11px] text-rose-400/70">
+                          Started: {new Date(inc.startedAt).toLocaleTimeString()}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* View Switcher Tabs */}
+            <div className="flex items-center gap-2 mb-6 border-b border-zinc-800 pb-3">
+              <button
+                onClick={() => setActiveTab("monitors")}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all ${
+                  activeTab === "monitors"
+                    ? "bg-zinc-800 text-zinc-100 border border-zinc-700"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                Monitors ({monitors.length})
+              </button>
+              <button
+                onClick={() => setActiveTab("incidents")}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                  activeTab === "incidents"
+                    ? "bg-zinc-800 text-zinc-100 border border-zinc-700"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                Incidents History ({incidents.length})
+              </button>
+            </div>
+
             {error && (
               <div className="p-4 mb-6 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm flex items-center gap-3">
                 <AlertCircle className="h-5 w-5 shrink-0" />
@@ -292,8 +348,52 @@ export default function MonitorsPage() {
               </div>
             )}
 
+            {activeTab === "incidents" ? (
+              <div className="space-y-3">
+                {incidents.length === 0 ? (
+                  <div className="p-12 text-center rounded-2xl bg-zinc-900/20 border border-zinc-800/80 border-dashed text-zinc-500 text-sm">
+                    No incidents recorded. All systems running cleanly!
+                  </div>
+                ) : (
+                  incidents.map((inc) => (
+                    <div
+                      key={inc.id}
+                      className="p-4 rounded-xl bg-zinc-900/40 border border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                              inc.resolvedAt
+                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                            }`}
+                          >
+                            {inc.resolvedAt ? "Resolved" : "Active Outage"}
+                          </span>
+                          <span className="font-semibold text-sm text-zinc-200">{inc.monitorName}</span>
+                        </div>
+                        <p className="text-zinc-400 font-mono text-[11px]">{inc.cause}</p>
+                      </div>
+
+                      <div className="text-right font-mono text-[11px] text-zinc-500 shrink-0">
+                        <div>Started: {new Date(inc.startedAt).toLocaleString()}</div>
+                        {inc.resolvedAt && (
+                          <div className="text-emerald-400/80">
+                            Resolved: {new Date(inc.resolvedAt).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : null}
+
             {/* Monitors Grid / Empty State */}
-            {loading ? (
+            {activeTab === "monitors" && (
+              <>
+                {loading ? (
               <div className="py-24 text-center text-zinc-500 text-sm">
                 <Activity className="h-6 w-6 animate-spin mx-auto mb-3 text-emerald-400" />
                 Loading your monitors...
@@ -444,6 +544,8 @@ export default function MonitorsPage() {
                   );
                 })}
               </div>
+            )}
+              </>
             )}
           </div>
         )}

@@ -8,14 +8,18 @@ import (
 
 // MemoryStore provides an in-memory thread-safe implementation of Store.
 type MemoryStore struct {
-	mu       sync.RWMutex
-	monitors map[string]*Monitor
+	mu            sync.RWMutex
+	monitors      map[string]*Monitor
+	incidents     map[string]*Incident
+	checkFailures map[string][]*CheckFailure
 }
 
 // NewMemoryStore initializes an empty in-memory store.
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		monitors: make(map[string]*Monitor),
+		monitors:      make(map[string]*Monitor),
+		incidents:     make(map[string]*Incident),
+		checkFailures: make(map[string][]*CheckFailure),
 	}
 }
 
@@ -172,9 +176,14 @@ func (s *MemoryStore) AcquireLease(ctx context.Context, id string, leaseUntil ti
 		return ErrNotFound
 	}
 
+	now := time.Now().UTC()
+	if m.LeaseUntil != nil && m.LeaseUntil.After(now) {
+		return ErrLeaseContested
+	}
+
 	m.LeaseUntil = &leaseUntil
 	m.NextCheckAt = nextCheckAt
-	m.UpdatedAt = time.Now().UTC()
+	m.UpdatedAt = now
 	return nil
 }
 
@@ -222,4 +231,132 @@ func (s *MemoryStore) RecordHeartbeatPing(ctx context.Context, id string, pingTi
 	m.State = StateUp
 	m.UpdatedAt = time.Now().UTC()
 	return nil
+}
+
+func (s *MemoryStore) CreateIncident(ctx context.Context, inc *Incident) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	clone := *inc
+	s.incidents[inc.ID] = &clone
+	return nil
+}
+
+func (s *MemoryStore) GetActiveIncident(ctx context.Context, monitorID string) (*Incident, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, inc := range s.incidents {
+		if inc.MonitorID == monitorID && inc.ResolvedAt == nil {
+			clone := *inc
+			return &clone, nil
+		}
+	}
+	return nil, ErrNotFound
+}
+
+func (s *MemoryStore) ResolveIncident(ctx context.Context, incidentID string, resolvedAt time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	inc, exists := s.incidents[incidentID]
+	if !exists {
+		return ErrNotFound
+	}
+
+	inc.ResolvedAt = &resolvedAt
+	return nil
+}
+
+func (s *MemoryStore) ListIncidentsByOwner(ctx context.Context, ownerUID string, limit int) ([]*Incident, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var result []*Incident
+	for _, inc := range s.incidents {
+		if inc.OwnerUID == ownerUID {
+			clone := *inc
+			result = append(result, &clone)
+		}
+	}
+
+	// Sort by startedAt desc
+	for i := 0; i < len(result)-1; i++ {
+		for j := i + 1; j < len(result); j++ {
+			if result[i].StartedAt.Before(result[j].StartedAt) {
+				result[i], result[j] = result[j], result[i]
+			}
+		}
+	}
+
+	if limit > 0 && len(result) > limit {
+		result = result[:limit]
+	}
+	return result, nil
+}
+
+func (s *MemoryStore) ListIncidentsByMonitor(ctx context.Context, monitorID string, limit int) ([]*Incident, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var result []*Incident
+	for _, inc := range s.incidents {
+		if inc.MonitorID == monitorID {
+			clone := *inc
+			result = append(result, &clone)
+		}
+	}
+
+	// Sort by startedAt desc
+	for i := 0; i < len(result)-1; i++ {
+		for j := i + 1; j < len(result); j++ {
+			if result[i].StartedAt.Before(result[j].StartedAt) {
+				result[i], result[j] = result[j], result[i]
+			}
+		}
+	}
+
+	if limit > 0 && len(result) > limit {
+		result = result[:limit]
+	}
+	return result, nil
+}
+
+func (s *MemoryStore) RecordCheckFailure(ctx context.Context, check *CheckFailure) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	clone := *check
+	s.checkFailures[check.MonitorID] = append(s.checkFailures[check.MonitorID], &clone)
+	return nil
+}
+
+func (s *MemoryStore) ListCheckFailures(ctx context.Context, monitorID string, limit int) ([]*CheckFailure, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	raw, exists := s.checkFailures[monitorID]
+	if !exists {
+		return []*CheckFailure{}, nil
+	}
+
+	result := make([]*CheckFailure, len(raw))
+	for i, c := range raw {
+		clone := *c
+		result[i] = &clone
+	}
+
+	// Sort by ts desc
+	for i := 0; i < len(result)-1; i++ {
+		for j := i + 1; j < len(result); j++ {
+			if result[i].TS.Before(result[j].TS) {
+				result[i], result[j] = result[j], result[i]
+			}
+		}
+	}
+
+	if limit > 0 && len(result) > limit {
+		result = result[:limit]
+	}
+	return result, nil
 }
