@@ -42,7 +42,7 @@ export function MonitorForm({
   const [url, setUrl] = useState(initialMonitor?.url || "https://");
   const [method, setMethod] = useState(initialMonitor?.method || "GET");
   const [intervalSec, setIntervalSec] = useState(
-    initialMonitor?.intervalSec || 300
+    initialMonitor?.intervalSec || 60
   );
   const [timeoutMs, setTimeoutMs] = useState(
     initialMonitor?.timeoutMs || 10000
@@ -267,8 +267,7 @@ export function MonitorForm({
                 onChange={(e) => setIntervalSec(Number(e.target.value))}
                 className="w-full px-3 py-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-page)] text-xs text-[var(--text-primary)] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] outline-none"
               >
-                <option value={30}>Every 30 seconds</option>
-                <option value={60}>Every 1 minute</option>
+                <option value={60}>Every 1 minute (Fastest)</option>
                 <option value={300}>Every 5 minutes</option>
                 <option value={600}>Every 10 minutes</option>
                 <option value={1800}>Every 30 minutes</option>

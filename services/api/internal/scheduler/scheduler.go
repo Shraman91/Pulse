@@ -207,6 +207,15 @@ func (s *Scheduler) executeCheck(ctx context.Context, m *store.Monitor) {
 			return
 		}
 
+		slog.Info("executed monitor check",
+			"monitorId", m.ID,
+			"name", m.Name,
+			"url", m.URL,
+			"status", result.StatusCode,
+			"ok", result.OK,
+			"latencyMs", result.LatencyMs,
+		)
+
 		// Calculate nextCheckAt with +/- 5% random jitter
 		nextCheckAt := CalculateNextCheck(now, m.IntervalSec)
 

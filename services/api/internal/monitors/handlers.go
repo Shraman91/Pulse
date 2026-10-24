@@ -278,7 +278,7 @@ func validateHTTPConfig(req CreateMonitorRequest, m *store.Monitor) error {
 	}
 
 	if req.IntervalSec == 0 {
-		m.IntervalSec = 300 // default 5 minutes
+		m.IntervalSec = 60 // default 1 minute
 	} else if req.IntervalSec < 60 || req.IntervalSec > 86400 {
 		return errors.New("intervalSec must be between 60 and 86400 seconds")
 	} else {
