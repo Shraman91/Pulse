@@ -63,11 +63,12 @@ export function UptimeDots({
     let latestHourInPoints = "";
 
     for (const p of points) {
-      if (!p.hour) continue;
-      if (p.hour > latestHourInPoints) {
-        latestHourInPoints = p.hour;
+      const hourStr = p.hour || (p.timestamp ? String(p.timestamp) : "");
+      if (!hourStr) continue;
+      if (hourStr > latestHourInPoints) {
+        latestHourInPoints = hourStr;
       }
-      const key = p.hour.slice(0, 10);
+      const key = hourStr.slice(0, 10);
       const list = pointsByDate.get(key) || [];
       list.push(p);
       pointsByDate.set(key, list);
@@ -180,10 +181,10 @@ export function UptimeDots({
       )}
 
       {/* Interactive SVG dots */}
-      <div className="relative overflow-visible">
+      <div className="relative overflow-visible max-w-2xl mx-auto py-1">
         <svg
           viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-          className="w-full h-auto overflow-visible"
+          className="w-full h-auto overflow-visible drop-shadow-sm"
           role="group"
           aria-label={`${days}-day uptime history${
             summary ? `: ${summary.uptimePct.toFixed(2)}% uptime` : ""

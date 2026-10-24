@@ -18,6 +18,9 @@ import {
   AlertCircle,
   ExternalLink,
   RefreshCw,
+  Clock,
+  Zap,
+  Activity,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -165,6 +168,18 @@ function MonitorDetailContent() {
     }
   };
 
+  const [copiedTarget, setCopiedTarget] = useState(false);
+  const handleCopyTarget = async () => {
+    if (!monitor?.url) return;
+    try {
+      await navigator.clipboard.writeText(monitor.url);
+      setCopiedTarget(true);
+      setTimeout(() => setCopiedTarget(false), 2000);
+    } catch {
+      // ignore
+    }
+  };
+
   // Latency chart formatting
   const chartData = (stats?.points || []).map((pt) => {
     let hour = pt.hourLabel || "";
@@ -284,75 +299,104 @@ function MonitorDetailContent() {
       </header>
 
       {/* Main Content Container */}
-      <main className="max-w-5xl mx-auto px-6 py-8 space-y-8">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-8 min-w-0">
         {/* Title Header */}
-        <div className="space-y-3">
+        <div className="space-y-4 min-w-0">
           <div className="flex flex-wrap items-center gap-2.5">
             {/* Status indicator */}
             {monitor.paused ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-[var(--silver-400)]/20 text-[var(--text-secondary)] border border-[var(--border-subtle)]">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[var(--silver-400)]/20 text-[var(--text-secondary)] border border-[var(--border-subtle)]">
                 <span className="w-2 h-2 rounded-full bg-[var(--status-paused)]" />
                 <span>Paused</span>
               </span>
             ) : monitor.state === "up" ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30">
-                <span className="w-2 h-2 rounded-full bg-[var(--status-up)]" />
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 glow-emerald">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--status-up)]" />
+                </span>
                 <span>Operational</span>
               </span>
             ) : monitor.state === "down" ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-500/15 text-red-800 dark:text-red-300 border border-red-500/30">
-                <span className="w-2 h-2 rounded-full bg-[var(--status-down)]" />
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-500/15 text-red-700 dark:text-red-300 border border-red-500/30 glow-crimson">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--status-down)]" />
+                </span>
                 <span>Failing</span>
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
                 <span className="w-2 h-2 rounded-full bg-[var(--accent-hint)]" />
                 <span>Pending check</span>
               </span>
             )}
 
             {/* Type badge */}
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-mono bg-[var(--bg-panel)] border border-[var(--border-subtle)] text-[var(--text-secondary)]">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono bg-[var(--bg-panel)] border border-[var(--border-subtle)] text-[var(--text-secondary)]">
               {monitor.type === "http" ? (
                 <>
-                  <Globe className="w-3 h-3 text-[var(--status-up)]" />
-                  <span>HTTP</span>
+                  <Globe className="w-3.5 h-3.5 text-[var(--status-up)]" />
+                  <span>HTTP check</span>
                 </>
               ) : (
                 <>
-                  <Radio className="w-3 h-3 text-[var(--accent-hint)]" />
+                  <Radio className="w-3.5 h-3.5 text-[var(--accent-hint)]" />
                   <span>Heartbeat (Cron)</span>
                 </>
               )}
             </span>
 
-            <span className="text-xs font-mono text-[var(--text-secondary)]">
+            <span className="text-xs font-mono text-[var(--text-secondary)] ml-auto sm:ml-0">
               Checked every {monitor.type === "http" ? `${monitor.intervalSec}s` : `${monitor.expectedEverySec}s`}
             </span>
           </div>
 
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--text-primary)]">
+          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-[var(--text-primary)] break-words">
             {monitor.name}
           </h1>
 
           {/* Target URL or Ping Token */}
           {monitor.type === "http" ? (
-            <div className="flex items-center gap-2 text-xs font-mono text-[var(--text-secondary)]">
-              <span className="px-1.5 py-0.5 rounded bg-[var(--bg-panel)] border border-[var(--border-subtle)] font-bold text-[var(--text-primary)]">
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 text-xs font-mono text-[var(--text-secondary)] min-w-0 max-w-full">
+              <span className="px-2 py-0.5 rounded bg-[var(--bg-panel)] border border-[var(--border-subtle)] font-bold text-[var(--text-primary)] shrink-0">
                 {monitor.method || "GET"}
               </span>
-              <a
-                href={monitor.url}
-                target="_blank"
-                rel="noreferrer"
-                className="hover:text-[var(--text-primary)] underline decoration-[var(--border-subtle)] flex items-center gap-1 truncate"
-              >
-                <span>{monitor.url}</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
+              <div className="flex items-center gap-2 min-w-0 max-w-full overflow-hidden p-1.5 rounded-lg bg-[var(--bg-panel)] border border-[var(--border-subtle)]">
+                <a
+                  href={monitor.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={monitor.url}
+                  className="hover:text-[var(--text-primary)] truncate max-w-xs sm:max-w-md lg:max-w-xl transition-colors"
+                >
+                  {monitor.url}
+                </a>
+                <button
+                  type="button"
+                  onClick={handleCopyTarget}
+                  title="Copy URL"
+                  className="p-1 rounded hover:bg-[var(--bg-page)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] shrink-0 transition-colors"
+                >
+                  {copiedTarget ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                </button>
+                <a
+                  href={monitor.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Open URL in new tab"
+                  className="p-1 rounded hover:bg-[var(--bg-page)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] shrink-0 transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
             </div>
           ) : (
-            <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] space-y-2">
+            <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] space-y-2 max-w-full overflow-hidden">
               <div className="flex items-center justify-between text-xs font-semibold text-[var(--text-primary)]">
                 <span>Heartbeat cURL ping URL</span>
                 <button
@@ -380,77 +424,113 @@ function MonitorDetailContent() {
           )}
         </div>
 
-        {/* 4 Metric Summary Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {/* 4 Metric Summary Cards with Protected Tiling */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 min-w-0">
           {/* Card 1: Uptime */}
-          <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] space-y-1">
-            <span className="text-xs text-[var(--text-secondary)] font-mono">
-              30-day uptime
-            </span>
-            <div className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--text-primary)]">
+          <div className="p-5 rounded-2xl glass-panel space-y-2 min-w-0 relative overflow-hidden group">
+            <div className="flex items-center justify-between text-xs text-[var(--text-secondary)] font-mono">
+              <span>30-day uptime</span>
+              <Activity className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+            </div>
+            <div className="text-2xl sm:text-3xl font-extrabold tracking-tight font-mono text-[var(--text-primary)] truncate">
               {stats?.uptimePct !== undefined
                 ? `${stats.uptimePct.toFixed(2)}%`
                 : "100.0%"}
             </div>
+            <div className="text-[11px] font-mono text-[var(--text-muted)] truncate">
+              {stats?.totalFailures !== undefined && stats.totalFailures > 0
+                ? `${stats.totalFailures} incident checks`
+                : "Zero downtime observed"}
+            </div>
           </div>
 
           {/* Card 2: Avg Latency */}
-          <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] space-y-1">
-            <span className="text-xs text-[var(--text-secondary)] font-mono">
-              Avg latency
-            </span>
-            <div className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--text-primary)] font-mono">
-              {stats?.avgLatencyMs !== undefined && stats.avgLatencyMs > 0
-                ? `${stats.avgLatencyMs} ms`
-                : "—"}
+          <div className="p-5 rounded-2xl glass-panel space-y-2 min-w-0 relative overflow-hidden group">
+            <div className="flex items-center justify-between text-xs text-[var(--text-secondary)] font-mono">
+              <span>Avg latency</span>
+              <Zap className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+            </div>
+            <div className="flex items-baseline gap-1.5 min-w-0">
+              <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[var(--text-primary)] font-mono truncate">
+                {stats?.avgLatencyMs !== undefined && stats.avgLatencyMs > 0
+                  ? Math.round(stats.avgLatencyMs)
+                  : "—"}
+              </span>
+              <span className="text-xs font-mono text-[var(--text-secondary)] shrink-0">ms</span>
+            </div>
+            <div className="text-[11px] font-mono text-[var(--text-muted)] truncate">
+              Full roundtrip average
             </div>
           </div>
 
           {/* Card 3: Peak Latency */}
-          <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] space-y-1">
-            <span className="text-xs text-[var(--text-secondary)] font-mono">
-              Peak latency
-            </span>
-            <div className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--text-primary)] font-mono">
-              {stats?.peakLatencyMs !== undefined && stats.peakLatencyMs > 0
-                ? `${stats.peakLatencyMs} ms`
-                : "—"}
+          <div className="p-5 rounded-2xl glass-panel space-y-2 min-w-0 relative overflow-hidden group">
+            <div className="flex items-center justify-between text-xs text-[var(--text-secondary)] font-mono">
+              <span>Peak latency</span>
+              <Clock className="w-4 h-4 text-[var(--accent-hint)] group-hover:scale-110 transition-transform" />
+            </div>
+            <div className="flex items-baseline gap-1.5 min-w-0">
+              <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[var(--accent-hint)] font-mono truncate">
+                {stats?.peakLatencyMs !== undefined && stats.peakLatencyMs > 0
+                  ? Math.round(stats.peakLatencyMs)
+                  : "—"}
+              </span>
+              <span className="text-xs font-mono text-[var(--text-secondary)] shrink-0">ms</span>
+            </div>
+            <div className="text-[11px] font-mono text-[var(--text-muted)] truncate">
+              Maximum measured spike
             </div>
           </div>
 
           {/* Card 4: Total Checks */}
-          <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] space-y-1">
-            <span className="text-xs text-[var(--text-secondary)] font-mono">
-              Total checks
-            </span>
-            <div className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--text-primary)] font-mono">
+          <div className="p-5 rounded-2xl glass-panel space-y-2 min-w-0 relative overflow-hidden group">
+            <div className="flex items-center justify-between text-xs text-[var(--text-secondary)] font-mono">
+              <span>Total checks</span>
+              <CheckCircle2 className="w-4 h-4 text-violet-400 group-hover:scale-110 transition-transform" />
+            </div>
+            <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[var(--text-primary)] font-mono truncate">
               {stats?.totalChecks !== undefined
                 ? stats.totalChecks.toLocaleString()
                 : "0"}
+            </div>
+            <div className="text-[11px] font-mono text-[var(--text-muted)] truncate">
+              Scheduled executions
             </div>
           </div>
         </div>
 
         {/* 30-Day UptimeDots Grid */}
-        <section aria-labelledby="uptime-grid-title" className="space-y-4">
-          <div className="border-b border-[var(--border-subtle)] pb-2 flex items-baseline justify-between">
-            <h2 id="uptime-grid-title" className="text-base font-bold tracking-tight text-[var(--text-primary)]">
-              Uptime history (30 days)
-            </h2>
-            <span className="text-xs font-mono text-[var(--text-secondary)]">
-              Halftone dot scale
-            </span>
+        <section aria-labelledby="uptime-grid-title" className="space-y-3 min-w-0">
+          <div className="border-b border-[var(--border-subtle)] pb-2 flex flex-wrap items-baseline justify-between gap-2">
+            <div>
+              <h2 id="uptime-grid-title" className="text-base font-bold tracking-tight text-[var(--text-primary)]">
+                Uptime history (30 days)
+              </h2>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Continuous availability dot field with halftone radius scaling
+              </p>
+            </div>
+            <div className="flex items-center gap-3 text-[11px] font-mono text-[var(--text-secondary)]">
+              <span className="inline-flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-[var(--status-up)]" />
+                <span>Operational</span>
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-[var(--status-down)]" />
+                <span>Incident</span>
+              </span>
+            </div>
           </div>
 
-          <div className="p-6 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-panel)]">
+          <div className="p-6 rounded-2xl glass-panel overflow-hidden">
             <UptimeDots points={stats?.points || []} days={30} />
           </div>
         </section>
 
         {/* Latency Breakdown Chart */}
         {monitor.type === "http" && (
-          <section aria-labelledby="latency-chart-title" className="space-y-4">
-            <div className="border-b border-[var(--border-subtle)] pb-2 flex items-center justify-between">
+          <section aria-labelledby="latency-chart-title" className="space-y-4 min-w-0">
+            <div className="border-b border-[var(--border-subtle)] pb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h2 id="latency-chart-title" className="text-base font-bold tracking-tight text-[var(--text-primary)]">
                   Microsecond latency breakdown
@@ -460,29 +540,47 @@ function MonitorDetailContent() {
                 </p>
               </div>
 
-              {/* Range Toggle */}
-              <div className="flex rounded-lg p-0.5 bg-[var(--bg-page)] border border-[var(--border-subtle)]">
-                {(["24h", "7d", "30d"] as const).map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => setRange(r)}
-                    className={`px-2.5 py-1 rounded-md text-xs font-mono font-semibold transition-colors ${
-                      range === r
-                        ? "bg-[var(--bg-panel)] text-[var(--text-primary)] shadow-sm"
-                        : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                    }`}
-                  >
-                    {r}
-                  </button>
-                ))}
+              <div className="flex items-center gap-3 self-start sm:self-auto">
+                {/* Color Legend */}
+                <div className="hidden md:flex items-center gap-2.5 text-[11px] font-mono text-[var(--text-secondary)]">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-[#06B6D4]" /> DNS
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-[#6366F1]" /> Connect
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-[#A855F7]" /> TLS
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-[#10B981]" /> TTFB
+                  </span>
+                </div>
+
+                {/* Range Toggle */}
+                <div className="flex rounded-lg p-0.5 bg-[var(--bg-page)] border border-[var(--border-subtle)]">
+                  {(["24h", "7d", "30d"] as const).map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setRange(r)}
+                      className={`px-3 py-1 rounded-md text-xs font-mono font-semibold transition-colors ${
+                        range === r
+                          ? "bg-[var(--bg-panel)] text-[var(--text-primary)] shadow-sm"
+                          : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                      }`}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
-            <div className="p-6 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-panel)]">
+            <div className="p-6 rounded-2xl glass-panel overflow-hidden">
               {statsLoading ? (
                 <div className="h-64 flex items-center justify-center text-xs text-[var(--text-secondary)]">
-                  <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                  <RefreshCw className="w-4 h-4 animate-spin mr-2 text-[var(--aubergine-400)]" />
                   <span>Loading telemetry rollups...</span>
                 </div>
               ) : chartData.length > 0 ? (
@@ -492,6 +590,24 @@ function MonitorDetailContent() {
                       data={chartData}
                       margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                     >
+                      <defs>
+                        <linearGradient id="detailDns" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#06B6D4" stopOpacity={0.8} />
+                          <stop offset="95%" stopColor="#06B6D4" stopOpacity={0.1} />
+                        </linearGradient>
+                        <linearGradient id="detailConnect" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#6366F1" stopOpacity={0.8} />
+                          <stop offset="95%" stopColor="#6366F1" stopOpacity={0.1} />
+                        </linearGradient>
+                        <linearGradient id="detailTls" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#A855F7" stopOpacity={0.8} />
+                          <stop offset="95%" stopColor="#A855F7" stopOpacity={0.1} />
+                        </linearGradient>
+                        <linearGradient id="detailTtfb" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10B981" stopOpacity={0.8} />
+                          <stop offset="95%" stopColor="#10B981" stopOpacity={0.1} />
+                        </linearGradient>
+                      </defs>
                       <XAxis
                         dataKey="hour"
                         stroke="var(--silver-600)"
@@ -505,49 +621,69 @@ function MonitorDetailContent() {
                         unit="ms"
                       />
                       <Tooltip
-                        contentStyle={{
-                          backgroundColor: "var(--aubergine-900)",
-                          borderColor: "var(--silver-600)",
-                          borderRadius: "8px",
-                          color: "var(--silver-50)",
-                          fontSize: "12px",
+                        content={({ active, payload, label }) => {
+                          if (!active || !payload || !payload.length) return null;
+                          const d = payload[0]?.payload;
+                          return (
+                            <div className="p-3.5 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-strong)] shadow-2xl text-xs font-mono space-y-1.5 min-w-[190px]">
+                              <div className="font-bold text-[var(--text-primary)] border-b border-[var(--border-subtle)] pb-1">
+                                {label}
+                              </div>
+                              <div className="flex justify-between text-[#06B6D4]">
+                                <span>DNS Lookup:</span>
+                                <span className="font-bold">{d.dns} ms</span>
+                              </div>
+                              <div className="flex justify-between text-[#6366F1]">
+                                <span>TCP Connect:</span>
+                                <span className="font-bold">{d.connect} ms</span>
+                              </div>
+                              <div className="flex justify-between text-[#A855F7]">
+                                <span>TLS Handshake:</span>
+                                <span className="font-bold">{d.tls} ms</span>
+                              </div>
+                              <div className="flex justify-between text-[#10B981]">
+                                <span>TTFB (Server):</span>
+                                <span className="font-bold">{d.ttfb} ms</span>
+                              </div>
+                              <div className="pt-1 border-t border-[var(--border-subtle)] flex justify-between font-bold text-[var(--text-primary)]">
+                                <span>Total Latency:</span>
+                                <span>{Math.round(d.total)} ms</span>
+                              </div>
+                            </div>
+                          );
                         }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="ttfb"
-                        name="TTFB"
-                        stackId="1"
-                        stroke="#5C2465"
-                        fill="#5C2465"
-                        fillOpacity={0.6}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="tls"
-                        name="TLS"
-                        stackId="1"
-                        stroke="#8A9099"
-                        fill="#8A9099"
-                        fillOpacity={0.5}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="connect"
-                        name="Connect"
-                        stackId="1"
-                        stroke="#B4B9C0"
-                        fill="#B4B9C0"
-                        fillOpacity={0.4}
                       />
                       <Area
                         type="monotone"
                         dataKey="dns"
                         name="DNS"
                         stackId="1"
-                        stroke="#F4A913"
-                        fill="#F4A913"
-                        fillOpacity={0.4}
+                        stroke="#06B6D4"
+                        fill="url(#detailDns)"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="connect"
+                        name="Connect"
+                        stackId="1"
+                        stroke="#6366F1"
+                        fill="url(#detailConnect)"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="tls"
+                        name="TLS"
+                        stackId="1"
+                        stroke="#A855F7"
+                        fill="url(#detailTls)"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="ttfb"
+                        name="TTFB"
+                        stackId="1"
+                        stroke="#10B981"
+                        fill="url(#detailTtfb)"
                       />
                     </AreaChart>
                   </ResponsiveContainer>
@@ -565,7 +701,7 @@ function MonitorDetailContent() {
         )}
 
         {/* Incidents Timeline */}
-        <section aria-labelledby="incidents-history-title" className="space-y-4">
+        <section aria-labelledby="incidents-history-title" className="space-y-4 min-w-0">
           <div className="border-b border-[var(--border-subtle)] pb-2 flex items-baseline justify-between">
             <h2 id="incidents-history-title" className="text-base font-bold tracking-tight text-[var(--text-primary)]">
               Recent incidents
@@ -580,16 +716,16 @@ function MonitorDetailContent() {
               {(incidents || []).map((inc) => (
                 <div
                   key={inc.id}
-                  className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                  className="p-4 rounded-xl glass-panel flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     {inc.resolvedAt ? (
                       <CheckCircle2 className="w-4 h-4 text-[var(--status-up)] shrink-0" />
                     ) : (
                       <XCircle className="w-4 h-4 text-[var(--status-down)] shrink-0" />
                     )}
-                    <div>
-                      <div className="font-semibold text-[var(--text-primary)]">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-[var(--text-primary)] truncate">
                         {inc.cause || "HTTP check failed"}
                       </div>
                       <div className="text-[11px] font-mono text-[var(--text-secondary)]">
@@ -601,7 +737,7 @@ function MonitorDetailContent() {
                     </div>
                   </div>
                   <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase self-start sm:self-auto ${
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase self-start sm:self-auto shrink-0 ${
                       inc.resolvedAt
                         ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20"
                         : "bg-red-500/10 text-red-700 dark:text-red-300 border border-red-500/20"
@@ -613,9 +749,9 @@ function MonitorDetailContent() {
               ))}
             </div>
           ) : (
-            <div className="p-8 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] text-center text-xs text-[var(--text-secondary)] space-y-1">
-              <CheckCircle2 className="w-5 h-5 text-[var(--status-up)] mx-auto mb-2" />
-              <div className="font-semibold text-[var(--text-primary)]">
+            <div className="p-8 rounded-2xl glass-panel text-center text-xs text-[var(--text-secondary)] space-y-1">
+              <CheckCircle2 className="w-6 h-6 text-[var(--status-up)] mx-auto mb-2" />
+              <div className="font-semibold text-[var(--text-primary)] text-sm">
                 Zero incident history
               </div>
               <p>No downtime or check failures recorded for this monitor.</p>

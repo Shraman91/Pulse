@@ -452,28 +452,77 @@ export default function MonitorsPage() {
 
       {/* Main Content Area */}
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
-        {/* System Overview Status Bar */}
-        <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4 text-xs font-mono">
-            <span className="text-[var(--text-secondary)] font-semibold">
-              System overview:
-            </span>
-            <span className="inline-flex items-center gap-1.5 text-[var(--text-primary)]">
-              <span className="w-2 h-2 rounded-full bg-[var(--status-up)]" />
-              <strong>{summary.up}</strong> up
-            </span>
-            <span className="inline-flex items-center gap-1.5 text-[var(--text-primary)]">
-              <span className="w-2 h-2 rounded-full bg-[var(--status-down)]" />
-              <strong>{summary.down}</strong> down
-            </span>
-            {summary.late > 0 && (
-              <span className="inline-flex items-center gap-1.5 text-[var(--status-late)]">
-                <span className="w-2 h-2 rounded-full bg-[var(--status-late)]" />
-                <strong>{summary.late}</strong> late
+        {/* System Overview 4-Card Status Bar */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 min-w-0">
+          {/* Card 1: Up */}
+          <div className="p-4 rounded-2xl glass-panel space-y-1.5 min-w-0 relative overflow-hidden group">
+            <div className="flex items-center justify-between text-xs text-[var(--text-secondary)] font-mono">
+              <span>Operational</span>
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--status-up)]" />
               </span>
-            )}
-            <span className="inline-flex items-center gap-1.5 text-[var(--text-secondary)]">
-              <strong>{summary.openIncidents}</strong> open incidents
+            </div>
+            <div className="text-2xl sm:text-3xl font-extrabold tracking-tight font-mono text-[var(--status-up)] truncate">
+              {summary.up}
+            </div>
+            <div className="text-[11px] font-mono text-[var(--text-muted)] truncate">
+              Endpoints healthy
+            </div>
+          </div>
+
+          {/* Card 2: Down */}
+          <div className="p-4 rounded-2xl glass-panel space-y-1.5 min-w-0 relative overflow-hidden group">
+            <div className="flex items-center justify-between text-xs text-[var(--text-secondary)] font-mono">
+              <span>Outages</span>
+              <span className={`w-2 h-2 rounded-full ${summary.down > 0 ? "bg-[var(--status-down)] animate-ping" : "bg-[var(--status-down)]"}`} />
+            </div>
+            <div className={`text-2xl sm:text-3xl font-extrabold tracking-tight font-mono truncate ${summary.down > 0 ? "text-[var(--status-down)]" : "text-[var(--text-primary)]"}`}>
+              {summary.down}
+            </div>
+            <div className="text-[11px] font-mono text-[var(--text-muted)] truncate">
+              Failing services
+            </div>
+          </div>
+
+          {/* Card 3: Late */}
+          <div className="p-4 rounded-2xl glass-panel space-y-1.5 min-w-0 relative overflow-hidden group">
+            <div className="flex items-center justify-between text-xs text-[var(--text-secondary)] font-mono">
+              <span>Late / Degraded</span>
+              <span className="w-2 h-2 rounded-full bg-[var(--status-late)]" />
+            </div>
+            <div className={`text-2xl sm:text-3xl font-extrabold tracking-tight font-mono truncate ${summary.late > 0 ? "text-[var(--status-late)]" : "text-[var(--text-primary)]"}`}>
+              {summary.late}
+            </div>
+            <div className="text-[11px] font-mono text-[var(--text-muted)] truncate">
+              Heartbeat delays
+            </div>
+          </div>
+
+          {/* Card 4: Total & Incidents */}
+          <div className="p-4 rounded-2xl glass-panel space-y-1.5 min-w-0 relative overflow-hidden group">
+            <div className="flex items-center justify-between text-xs text-[var(--text-secondary)] font-mono">
+              <span>Open Incidents</span>
+              <span className="w-2 h-2 rounded-full bg-[var(--accent-hint)]" />
+            </div>
+            <div className="text-2xl sm:text-3xl font-extrabold tracking-tight font-mono text-[var(--text-primary)] truncate">
+              {summary.openIncidents}
+            </div>
+            <div className="text-[11px] font-mono text-[var(--text-muted)] truncate">
+              Across {(monitors || []).length} total monitors
+            </div>
+          </div>
+        </div>
+
+        {/* Action Bar with Primary Buttons */}
+        <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-bold text-[var(--text-primary)]">
+              {activeTab === "monitors"
+                ? `Active Monitors (${filteredMonitors.length})`
+                : activeTab === "incidents"
+                ? `Incidents History (${(incidents || []).length})`
+                : `Public Status Pages (${(statusPages || []).length})`}
             </span>
           </div>
 
@@ -481,9 +530,9 @@ export default function MonitorsPage() {
             <button
               type="button"
               onClick={() => setIsCreateModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[var(--aubergine-900)] text-[var(--silver-50)] text-xs font-semibold hover:bg-[var(--aubergine-700)] transition-colors shadow-sm focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] outline-none"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--aubergine-900)] text-[var(--silver-50)] text-xs font-semibold hover:bg-[var(--aubergine-700)] transition-all shadow-sm focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] outline-none glow-amethyst"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-4 h-4" />
               <span>Create monitor</span>
             </button>
           )}
@@ -492,9 +541,9 @@ export default function MonitorsPage() {
             <button
               type="button"
               onClick={() => setIsStatusPageModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[var(--aubergine-900)] text-[var(--silver-50)] text-xs font-semibold hover:bg-[var(--aubergine-700)] transition-colors shadow-sm focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] outline-none"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--aubergine-900)] text-[var(--silver-50)] text-xs font-semibold hover:bg-[var(--aubergine-700)] transition-all shadow-sm focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] outline-none glow-amethyst"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-4 h-4" />
               <span>Create status page</span>
             </button>
           )}
@@ -519,10 +568,10 @@ export default function MonitorsPage() {
 
         {/* TAB 1: MONITORS */}
         {activeTab === "monitors" && (
-          <section aria-labelledby="monitors-table-heading" className="space-y-4">
+          <section aria-labelledby="monitors-table-heading" className="space-y-4 min-w-0">
             {/* Search and Filters */}
             {(monitors || []).length > 0 && (
-              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between min-w-0">
                 <div className="relative flex-1 max-w-sm">
                   <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" />
                   <input
@@ -530,17 +579,17 @@ export default function MonitorsPage() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search monitors by name or URL..."
-                    className="w-full pl-9 pr-3.5 py-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-panel)] text-xs text-[var(--text-primary)] placeholder-[var(--text-secondary)] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] outline-none"
+                    className="w-full pl-9 pr-3.5 py-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] text-xs text-[var(--text-primary)] placeholder-[var(--text-secondary)] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] outline-none transition-colors"
                   />
                 </div>
 
-                <div className="flex rounded-lg p-0.5 bg-[var(--bg-panel)] border border-[var(--border-subtle)]">
+                <div className="flex rounded-xl p-0.5 bg-[var(--bg-panel)] border border-[var(--border-subtle)]">
                   {(["all", "up", "down", "paused"] as const).map((st) => (
                     <button
                       key={st}
                       type="button"
                       onClick={() => setFilterState(st)}
-                      className={`px-3 py-1 rounded-md text-xs font-semibold capitalize transition-colors ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all ${
                         filterState === st
                           ? "bg-[var(--bg-page)] text-[var(--text-primary)] shadow-sm"
                           : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
@@ -565,25 +614,25 @@ export default function MonitorsPage() {
                   onAction={() => setIsCreateModalOpen(true)}
                 />
               ) : (
-                <div className="p-8 text-center text-xs text-[var(--text-secondary)] rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-panel)]">
+                <div className="p-8 text-center text-xs text-[var(--text-secondary)] rounded-2xl glass-panel">
                   No monitors match your current search and filter.
                 </div>
               )
             ) : (
-              /* Dense Laboratory-Grade Monitors Table */
-              <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] overflow-hidden shadow-sm">
-                <table className="w-full text-left text-xs border-collapse">
+              /* Dense Laboratory-Grade Monitors Table with Overflow-X Container */
+              <div className="rounded-2xl glass-panel overflow-x-auto shadow-sm">
+                <table className="w-full text-left text-xs border-collapse min-w-[700px]">
                   <thead>
-                    <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-page)]/60 text-[var(--text-secondary)] font-mono text-[11px]">
-                      <th className="py-3 px-4 font-medium">State</th>
-                      <th className="py-3 px-4 font-medium">Monitor</th>
-                      <th className="py-3 px-4 font-medium hidden md:table-cell">
+                    <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-page)]/70 text-[var(--text-secondary)] font-mono text-[11px]">
+                      <th className="py-3.5 px-4 font-semibold">State</th>
+                      <th className="py-3.5 px-4 font-semibold">Monitor</th>
+                      <th className="py-3.5 px-4 font-semibold hidden md:table-cell">
                         Target / Cron
                       </th>
-                      <th className="py-3 px-4 font-medium hidden sm:table-cell">
+                      <th className="py-3.5 px-4 font-semibold hidden sm:table-cell">
                         Interval
                       </th>
-                      <th className="py-3 px-4 font-medium text-right">
+                      <th className="py-3.5 px-4 font-semibold text-right">
                         Actions
                       </th>
                     </tr>
@@ -599,28 +648,28 @@ export default function MonitorsPage() {
                       return (
                         <tr
                           key={mon.id}
-                          className="hover:bg-[var(--bg-page)]/70 transition-colors group"
+                          className="hover:bg-[var(--bg-page)]/80 transition-colors group"
                         >
                           {/* State Column */}
-                          <td className="py-3 px-4 whitespace-nowrap">
+                          <td className="py-3.5 px-4 whitespace-nowrap">
                             <div className="flex items-center gap-2">
                               {mon.paused ? (
-                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-[var(--silver-400)]/20 text-[var(--text-secondary)]">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[var(--silver-400)]/20 text-[var(--text-secondary)] border border-[var(--border-subtle)]">
                                   <span className="w-2 h-2 rounded-full bg-[var(--status-paused)]" />
                                   <span>Paused</span>
                                 </span>
                               ) : mon.state === "up" ? (
-                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/15 text-emerald-800 dark:text-emerald-300">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
                                   <span className="w-2 h-2 rounded-full bg-[var(--status-up)]" />
                                   <span>Up</span>
                                 </span>
                               ) : mon.state === "down" ? (
-                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-red-500/15 text-red-800 dark:text-red-300">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-red-500/15 text-red-700 dark:text-red-300 border border-red-500/30">
                                   <span className="w-2 h-2 rounded-full bg-[var(--status-down)]" />
                                   <span>Down</span>
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/15 text-amber-800 dark:text-amber-300">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
                                   <span className="w-2 h-2 rounded-full bg-[var(--accent-hint)]" />
                                   <span>Pending</span>
                                 </span>
@@ -637,13 +686,14 @@ export default function MonitorsPage() {
                           </td>
 
                           {/* Name Column */}
-                          <td className="py-3 px-4">
+                          <td className="py-3.5 px-4">
                             <Link
                               href={`/monitors/${mon.id}`}
-                              className="font-bold text-[var(--text-primary)] hover:underline flex items-center gap-1.5"
+                              className="font-bold text-[var(--text-primary)] hover:underline flex items-center gap-1.5 max-w-[200px] sm:max-w-[260px] truncate"
+                              title={mon.name}
                             >
-                              <span>{mon.name}</span>
-                              <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 text-[var(--text-secondary)] transition-opacity" />
+                              <span className="truncate">{mon.name}</span>
+                              <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 text-[var(--text-secondary)] transition-opacity shrink-0" />
                             </Link>
                             <span className="text-[11px] font-mono text-[var(--text-secondary)] block sm:hidden truncate max-w-[200px]">
                               {mon.type === "http" ? mon.url : `cron: ping/${mon.pingToken?.slice(0, 8)}`}
@@ -651,12 +701,12 @@ export default function MonitorsPage() {
                           </td>
 
                           {/* Target Column */}
-                          <td className="py-3 px-4 hidden md:table-cell font-mono text-[11px] text-[var(--text-secondary)] max-w-xs truncate">
+                          <td className="py-3.5 px-4 hidden md:table-cell font-mono text-[11px] text-[var(--text-secondary)] max-w-[220px] sm:max-w-xs truncate">
                             {mon.type === "http" ? (
-                              <span className="truncate">{mon.url}</span>
+                              <span className="truncate block" title={mon.url}>{mon.url}</span>
                             ) : (
-                              <div className="flex items-center gap-1.5">
-                                <Radio className="w-3 h-3 text-[var(--accent-hint)] shrink-0" />
+                              <div className="flex items-center gap-1.5 truncate">
+                                <Radio className="w-3.5 h-3.5 text-[var(--accent-hint)] shrink-0" />
                                 <span className="truncate">
                                   ping/{mon.pingToken?.slice(0, 12)}...
                                 </span>
@@ -665,14 +715,16 @@ export default function MonitorsPage() {
                           </td>
 
                           {/* Interval Column */}
-                          <td className="py-3 px-4 hidden sm:table-cell font-mono text-[11px] text-[var(--text-secondary)]">
-                            {mon.type === "http"
-                              ? `${mon.intervalSec}s`
-                              : `${mon.expectedEverySec}s`}
+                          <td className="py-3.5 px-4 hidden sm:table-cell font-mono text-[11px] text-[var(--text-secondary)] whitespace-nowrap">
+                            <span className="px-2 py-0.5 rounded bg-[var(--bg-page)] border border-[var(--border-subtle)]">
+                              {mon.type === "http"
+                                ? `${mon.intervalSec}s`
+                                : `${mon.expectedEverySec}s`}
+                            </span>
                           </td>
 
                           {/* Actions Column */}
-                          <td className="py-3 px-4 text-right whitespace-nowrap">
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
                             <div className="inline-flex items-center gap-1.5">
                               <Link
                                 href={`/monitors/${mon.id}`}
@@ -728,7 +780,7 @@ export default function MonitorsPage() {
 
         {/* TAB 2: INCIDENTS */}
         {activeTab === "incidents" && (
-          <section aria-labelledby="incidents-heading" className="space-y-4">
+          <section aria-labelledby="incidents-heading" className="space-y-4 min-w-0">
             <h2 id="incidents-heading" className="text-base font-bold text-[var(--text-primary)]">
               All incidents
             </h2>
@@ -744,18 +796,18 @@ export default function MonitorsPage() {
                 {(incidents || []).map((inc) => (
                   <div
                     key={inc.id}
-                    className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                    className="p-4 rounded-xl glass-panel flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
                       {inc.resolvedAt ? (
                         <CheckCircle2 className="w-4 h-4 text-[var(--status-up)] shrink-0" />
                       ) : (
                         <XCircle className="w-4 h-4 text-[var(--status-down)] shrink-0" />
                       )}
-                      <div>
-                        <div className="font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                      <div className="min-w-0">
+                        <div className="font-semibold text-[var(--text-primary)] flex items-center gap-2 truncate">
                           <span>{inc.monitorName}</span>
-                          <span className="font-normal text-[var(--text-secondary)]">
+                          <span className="font-normal text-[var(--text-secondary)] truncate">
                             — {inc.cause || "Health check failed"}
                           </span>
                         </div>
@@ -773,7 +825,7 @@ export default function MonitorsPage() {
                     </div>
 
                     <span
-                      className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase self-start sm:self-auto ${
+                      className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase self-start sm:self-auto shrink-0 ${
                         inc.resolvedAt
                           ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20"
                           : "bg-red-500/10 text-red-700 dark:text-red-300 border border-red-500/20"
@@ -790,7 +842,7 @@ export default function MonitorsPage() {
 
         {/* TAB 3: STATUS PAGES */}
         {activeTab === "statuspages" && (
-          <section aria-labelledby="statuspages-heading" className="space-y-4">
+          <section aria-labelledby="statuspages-heading" className="space-y-4 min-w-0">
             <h2 id="statuspages-heading" className="text-base font-bold text-[var(--text-primary)]">
               Public status pages
             </h2>
@@ -804,39 +856,46 @@ export default function MonitorsPage() {
                 onAction={() => setIsStatusPageModalOpen(true)}
               />
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                 {(statusPages || []).map((sp) => (
                   <div
                     key={sp.id}
-                    className="p-5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] space-y-3"
+                    className="p-5 rounded-2xl glass-panel space-y-3.5 flex flex-col justify-between"
                   >
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-bold text-[var(--text-primary)] text-sm">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-up)]" />
+                          <span>Live</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteStatusPage(sp.id, sp.title)}
+                          className="text-xs text-red-500 hover:underline"
+                        >
+                          Delete
+                        </button>
+                      </div>
+
+                      <h3 className="font-bold text-[var(--text-primary)] text-sm tracking-tight">
                         {sp.title}
                       </h3>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteStatusPage(sp.id, sp.title)}
-                        className="text-xs text-red-500 hover:underline"
-                      >
-                        Delete
-                      </button>
+
+                      {sp.description && (
+                        <p className="text-xs text-[var(--text-secondary)] line-clamp-2 leading-relaxed">
+                          {sp.description}
+                        </p>
+                      )}
                     </div>
 
-                    {sp.description && (
-                      <p className="text-xs text-[var(--text-secondary)] line-clamp-2">
-                        {sp.description}
-                      </p>
-                    )}
-
-                    <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-xs font-mono">
+                    <div className="pt-3 border-t border-[var(--border-subtle)] flex items-center justify-between text-xs font-mono">
                       <span className="text-[var(--text-secondary)]">
                         {(sp.monitorIds || []).length} monitors
                       </span>
                       <Link
                         href={`/status/${sp.slug}`}
                         target="_blank"
-                        className="inline-flex items-center gap-1 text-[var(--aubergine-500)] hover:underline font-semibold"
+                        className="inline-flex items-center gap-1 text-[var(--aubergine-400)] hover:underline font-semibold"
                       >
                         <span>/status/{sp.slug}</span>
                         <ExternalLink className="w-3 h-3" />

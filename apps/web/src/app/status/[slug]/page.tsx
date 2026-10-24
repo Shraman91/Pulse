@@ -132,33 +132,33 @@ function StatusPageContent() {
         <div
           className={`p-6 rounded-2xl border transition-all ${
             isOperational
-              ? "bg-emerald-500/5 border-emerald-500/30 text-emerald-950 dark:text-emerald-100"
+              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-950 dark:text-emerald-100 glow-emerald"
               : isDegraded
-              ? "bg-amber-500/5 border-amber-500/30 text-amber-950 dark:text-amber-100"
-              : "bg-rose-500/5 border-rose-500/30 text-rose-950 dark:text-rose-100"
+              ? "bg-amber-500/10 border-amber-500/30 text-amber-950 dark:text-amber-100"
+              : "bg-rose-500/10 border-rose-500/30 text-rose-950 dark:text-rose-100 glow-crimson"
           }`}
         >
           <div className="flex items-center gap-4">
             {isOperational && (
-              <div className="relative flex h-5 w-5 shrink-0">
+              <div className="relative flex h-6 w-6 shrink-0">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-5 w-5 bg-emerald-500 items-center justify-center text-white">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
+                <span className="relative inline-flex rounded-full h-6 w-6 bg-emerald-500 items-center justify-center text-white">
+                  <CheckCircle2 className="w-4 h-4" />
                 </span>
               </div>
             )}
             {isDegraded && (
-              <div className="relative flex h-5 w-5 shrink-0">
+              <div className="relative flex h-6 w-6 shrink-0">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-5 w-5 bg-amber-500 items-center justify-center text-white">
-                  <AlertTriangle className="w-3 h-3" />
+                <span className="relative inline-flex rounded-full h-6 w-6 bg-amber-500 items-center justify-center text-white">
+                  <AlertTriangle className="w-3.5 h-3.5" />
                 </span>
               </div>
             )}
             {isOutage && (
-              <div className="relative flex h-5 w-5 shrink-0">
+              <div className="relative flex h-6 w-6 shrink-0">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-5 w-5 bg-rose-500 items-center justify-center text-white font-bold text-xs">
+                <span className="relative inline-flex rounded-full h-6 w-6 bg-rose-500 items-center justify-center text-white font-bold text-xs">
                   !
                 </span>
               </div>
@@ -172,7 +172,7 @@ function StatusPageContent() {
                   ? "Partial Service Degradation"
                   : "Major System Outage Detected"}
               </h2>
-              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5 leading-relaxed">
                 {isOperational
                   ? "All systems and background services are operating within normal baseline latency."
                   : isDegraded
@@ -184,15 +184,15 @@ function StatusPageContent() {
         </div>
 
         {/* Monitored Services Section */}
-        <section className="space-y-4">
+        <section className="space-y-4 min-w-0">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Services & Infrastructure</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Services &amp; Infrastructure</h3>
             <span className="text-xs font-mono text-[var(--text-secondary)]">30-day window</span>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0">
             {(data.monitors || []).length === 0 ? (
-              <div className="p-8 text-center rounded-2xl bg-[var(--bg-panel)] border border-[var(--border-subtle)] text-[var(--text-secondary)] text-xs">
+              <div className="p-8 text-center rounded-2xl glass-panel text-[var(--text-secondary)] text-xs">
                 No active monitors configured for this status page.
               </div>
             ) : (
@@ -203,13 +203,13 @@ function StatusPageContent() {
                 return (
                   <div
                     key={mon.id}
-                    className="p-5 rounded-2xl bg-[var(--bg-panel)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] transition-all space-y-4"
+                    className="p-5 rounded-2xl glass-panel space-y-4 min-w-0 overflow-hidden"
                   >
                     {/* Header Row */}
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2.5">
+                    <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 min-w-0">
+                      <div className="flex items-center gap-2.5 min-w-0">
                         <span
-                          className={`h-2.5 w-2.5 rounded-full ${
+                          className={`h-2.5 w-2.5 rounded-full shrink-0 ${
                             isMonUp
                               ? "bg-[var(--status-up)]"
                               : isMonDown
@@ -217,23 +217,25 @@ function StatusPageContent() {
                               : "bg-[var(--accent-hint)]"
                           }`}
                         />
-                        <span className="font-semibold text-sm text-[var(--text-primary)]">{mon.name}</span>
-                        <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-[var(--border-subtle)]/40 text-[var(--text-secondary)]">
+                        <span className="font-semibold text-sm text-[var(--text-primary)] truncate max-w-[220px] sm:max-w-md" title={mon.name}>
+                          {mon.name}
+                        </span>
+                        <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-[var(--border-subtle)]/50 text-[var(--text-secondary)] shrink-0">
                           {mon.type}
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 shrink-0">
                         <span className="text-xs font-mono font-bold text-[var(--text-primary)]">
                           {mon.uptime30d.toFixed(2)}%
                         </span>
                         <span
-                          className={`text-[10px] uppercase font-semibold px-2.5 py-0.5 rounded ${
+                          className={`text-[10px] uppercase font-semibold px-2.5 py-0.5 rounded-full ${
                             isMonUp
-                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30"
                               : isMonDown
-                              ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
-                              : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                              ? "bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30"
+                              : "bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30"
                           }`}
                         >
                           {isMonUp ? "Operational" : isMonDown ? "Down" : "Checking"}
@@ -242,11 +244,11 @@ function StatusPageContent() {
                     </div>
 
                     {/* 30-Day Interactive Uptime Dots */}
-                    <div className="pt-1">
+                    <div className="pt-1 overflow-hidden">
                       <UptimeDots points={mon.uptimeBars || []} days={30} showSummary={false} />
                       <div className="flex justify-between text-[10px] font-mono text-[var(--text-secondary)] mt-1.5">
                         <span>30 days ago</span>
-                        <span>{mon.uptime30d.toFixed(1)}% uptime</span>
+                        <span className="font-semibold">{mon.uptime30d.toFixed(1)}% uptime</span>
                         <span>Today</span>
                       </div>
                     </div>

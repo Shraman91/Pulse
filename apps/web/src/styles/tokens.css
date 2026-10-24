@@ -1,98 +1,135 @@
 :root {
   /* Core Raw Palette Tokens */
-  --silver-50: #F2F3F5;
-  --silver-200: #D9DCE0;
-  --silver-400: #B4B9C0;
-  --silver-600: #8A9099;
-  --aubergine-900: #1B0A1F;
-  --aubergine-700: #3A1540;
-  --aubergine-500: #5C2465;
-  --marigold-500: #F4A913;
-  --marigold-300: #FFC94D;
-
-  /* Monitor State Colors (Muted, paired with icon + text label) */
-  --state-up: #237836;
-  --state-up-bg: #EAF7ED;
-  --state-up-border: #95DE64;
-
-  --state-down: #A8071A;
-  --state-down-bg: #FFF1F0;
-  --state-down-border: #FFA39E;
-
-  --state-late: #AD6800;
-  --state-late-bg: #FFFBE6;
-  --state-late-border: #FFE58F;
-
-  --state-paused: #595959;
-  --state-paused-bg: #F5F5F5;
-  --state-paused-border: #D9D9D9;
-
-  --state-unknown: #8C8C8C;
-  --state-unknown-bg: #F5F5F5;
-  --state-unknown-border: #D9D9D9;
-
-  /* Semantic Theme Roles: Default Light Theme (Machined Silver Surface, Aubergine Ink) */
-  --bg-page: var(--silver-200);
-  --bg-panel: var(--silver-50);
-  --bg-subtle: #E2E5E9;
-  --border-subtle: var(--silver-400);
-  --border-strong: #9BA1AA;
+  --silver-50: #F8FAFC;
+  --silver-100: #F1F5F9;
+  --silver-200: #E2E8F0;
+  --silver-400: #94A3B8;
+  --silver-600: #64748B;
   
-  --text-primary: var(--aubergine-900);
-  --text-secondary: var(--silver-600);
-  --text-muted: #6B7280;
+  --aubergine-950: #0A0512;
+  --aubergine-900: #140D21;
+  --aubergine-800: #1E1231;
+  --aubergine-700: #381A54;
+  --aubergine-500: #9333EA;
+  --aubergine-400: #A855F7;
+  --aubergine-300: #C084FC;
 
-  --accent-primary: var(--aubergine-500);
-  --accent-primary-hover: var(--aubergine-700);
-  --accent-primary-text: var(--silver-50);
+  --marigold-500: #F59E0B;
+  --marigold-400: #FBBF24;
+  --marigold-300: #FCD34D;
+
+  /* State & Status Colors (Light Theme: Crisp & High-Contrast) */
+  --status-up: #059669;
+  --status-up-bg: #ECFDF5;
+  --status-up-border: #A7F3D0;
+  --status-up-glow: rgba(16, 185, 129, 0.25);
+
+  --status-down: #DC2626;
+  --status-down-bg: #FEF2F2;
+  --status-down-border: #FECACA;
+  --status-down-glow: rgba(239, 68, 68, 0.25);
+
+  --status-late: #D97706;
+  --status-late-bg: #FFFBEB;
+  --status-late-border: #FDE68A;
+
+  --status-paused: #64748B;
+  --status-paused-bg: #F1F5F9;
+  --status-paused-border: #CBD5E1;
+
+  --status-unknown: #94A3B8;
+  --status-unknown-bg: #F8FAFC;
+  --status-unknown-border: #E2E8F0;
+
+  /* Aliases for legacy state-* */
+  --state-up: var(--status-up);
+  --state-up-bg: var(--status-up-bg);
+  --state-up-border: var(--status-up-border);
+  --state-down: var(--status-down);
+  --state-down-bg: var(--status-down-bg);
+  --state-down-border: var(--status-down-border);
+  --state-late: var(--status-late);
+  --state-late-bg: var(--status-late-bg);
+  --state-late-border: var(--status-late-border);
+  --state-paused: var(--status-paused);
+  --state-paused-bg: var(--status-paused-bg);
+  --state-paused-border: var(--status-paused-border);
+  --state-unknown: var(--status-unknown);
+  --state-unknown-bg: var(--status-unknown-bg);
+  --state-unknown-border: var(--status-unknown-border);
+
+  /* Semantic Theme Roles: Light Theme */
+  --bg-page: #F8FAFC;
+  --bg-panel: #FFFFFF;
+  --bg-subtle: #F1F5F9;
+  --border-subtle: #E2E8F0;
+  --border-strong: #CBD5E1;
+  --border-glow: rgba(147, 51, 234, 0.2);
+
+  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+  --card-hover-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+  
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #64748B;
+
+  --accent-primary: #7E22CE;
+  --accent-primary-hover: #6B21A8;
+  --accent-primary-text: #FFFFFF;
 
   --accent-hint: var(--marigold-500);
-  --focus-ring: var(--marigold-500);
+  --focus-ring: #A855F7;
 
-  --halftone-dot: var(--aubergine-900);
-  --halftone-bg: var(--silver-200);
+  --halftone-dot: #CBD5E1;
+  --halftone-bg: #F8FAFC;
 }
 
-/* Dark Theme (Aubergine-900 Surface, Silver Ink, Marigold-300 Hints) */
+/* Dark Theme: Deep Cybernetic Obsidian & Violet Amethyst */
 html.dark {
-  --bg-page: var(--aubergine-900);
-  --bg-panel: #240E2A;
-  --bg-subtle: var(--aubergine-700);
-  --border-subtle: #4D1E54;
-  --border-strong: #722D7D;
+  --bg-page: #08040E;
+  --bg-panel: #110A1A;
+  --bg-subtle: #190F26;
+  --border-subtle: rgba(168, 85, 247, 0.16);
+  --border-strong: rgba(192, 132, 252, 0.35);
+  --border-glow: rgba(168, 85, 247, 0.35);
 
-  --text-primary: var(--silver-200);
-  --text-secondary: #9FA5AF;
-  --text-muted: var(--silver-600);
+  --card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.6), 0 0 15px -3px rgba(168, 85, 247, 0.08);
+  --card-hover-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.8), 0 0 25px -2px rgba(168, 85, 247, 0.22);
 
-  --accent-primary: var(--aubergine-500);
-  --accent-primary-hover: #732D7F;
-  --accent-primary-text: var(--silver-50);
+  --text-primary: #F8FAFC;
+  --text-secondary: #A1A1AA;
+  --text-muted: #71717A;
 
-  --accent-hint: var(--marigold-300);
-  --focus-ring: var(--marigold-300);
+  --accent-primary: #9333EA;
+  --accent-primary-hover: #A855F7;
+  --accent-primary-text: #FFFFFF;
 
-  --halftone-dot: var(--silver-400);
-  --halftone-bg: var(--aubergine-900);
+  --accent-hint: #FBBF24;
+  --focus-ring: #C084FC;
 
-  /* Dark Theme State Colors (Adapted for dark contrast) */
-  --state-up: #49AA19;
-  --state-up-bg: #132718;
-  --state-up-border: #1F4F28;
+  --halftone-dot: rgba(168, 85, 247, 0.25);
+  --halftone-bg: #08040E;
 
-  --state-down: #E84749;
-  --state-down-bg: #2A1215;
-  --state-down-border: #5C1D24;
+  /* Dark Theme Status Colors (Luminous OLED accents) */
+  --status-up: #10B981;
+  --status-up-bg: rgba(16, 185, 129, 0.12);
+  --status-up-border: rgba(16, 185, 129, 0.3);
+  --status-up-glow: rgba(16, 185, 129, 0.4);
 
-  --state-late: #D89614;
-  --state-late-bg: #2B1D0E;
-  --state-late-border: #593C15;
+  --status-down: #EF4444;
+  --status-down-bg: rgba(239, 68, 68, 0.12);
+  --status-down-border: rgba(239, 68, 68, 0.3);
+  --status-down-glow: rgba(239, 68, 68, 0.4);
 
-  --state-paused: #8C8C8C;
-  --state-paused-bg: #1E1622;
-  --state-paused-border: #3D2944;
+  --status-late: #F59E0B;
+  --status-late-bg: rgba(245, 158, 11, 0.12);
+  --status-late-border: rgba(245, 158, 11, 0.3);
 
-  --state-unknown: #8C8C8C;
-  --state-unknown-bg: #1E1622;
-  --state-unknown-border: #3D2944;
+  --status-paused: #94A3B8;
+  --status-paused-bg: rgba(148, 163, 184, 0.1);
+  --status-paused-border: rgba(148, 163, 184, 0.25);
+
+  --status-unknown: #A1A1AA;
+  --status-unknown-bg: rgba(161, 161, 170, 0.1);
+  --status-unknown-border: rgba(161, 161, 170, 0.25);
 }

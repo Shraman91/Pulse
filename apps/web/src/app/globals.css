@@ -54,6 +54,52 @@ body {
   box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
+/* Laboratory-grade custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+/* Glassmorphic card & elevation utilities */
+.glass-panel {
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--card-shadow);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-panel:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--card-hover-shadow);
+}
+
+.glow-emerald {
+  box-shadow: 0 0 20px -3px var(--status-up-glow);
+}
+
+.glow-crimson {
+  box-shadow: 0 0 20px -3px var(--status-down-glow);
+}
+
+.glow-amethyst {
+  box-shadow: 0 0 20px -3px var(--border-glow);
+}
+
+/* Text clamp & scale protection */
+.text-balance-header {
+  text-wrap: balance;
+}
+
 /* Respect reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *,

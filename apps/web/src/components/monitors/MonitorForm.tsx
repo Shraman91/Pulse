@@ -39,7 +39,7 @@ export function MonitorForm({
   const [name, setName] = useState(initialMonitor?.name || "");
 
   // HTTP specific state
-  const [url, setUrl] = useState(initialMonitor?.url || "https://");
+  const [url, setUrl] = useState(initialMonitor?.url || "");
   const [method, setMethod] = useState(initialMonitor?.method || "GET");
   const [intervalSec, setIntervalSec] = useState(
     initialMonitor?.intervalSec || 60
@@ -124,8 +124,17 @@ export function MonitorForm({
     }
 
     if (type === "http") {
-      const trimmedUrl = url.trim();
-      if (!trimmedUrl || (!trimmedUrl.startsWith("http://") && !trimmedUrl.startsWith("https://"))) {
+      let trimmedUrl = url.trim();
+      // Auto-correct accidental duplicate protocols e.g. "https://https://", "https://http://"
+      trimmedUrl = trimmedUrl.replace(/^(https?:\/\/)+/i, (match) => {
+        return match.toLowerCase().includes("https://") ? "https://" : "http://";
+      });
+      // If user typed only a domain/IP e.g. "example.com" or "1.1.1.1", default to https://
+      if (!trimmedUrl.startsWith("http://") && !trimmedUrl.startsWith("https://")) {
+        trimmedUrl = `https://${trimmedUrl}`;
+      }
+
+      if (trimmedUrl.length <= 8) {
         setValidationError("Please enter a valid HTTP or HTTPS URL");
         return;
       }
