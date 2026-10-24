@@ -61,16 +61,15 @@ func main() {
 	rootCtx, cancelRoot := context.WithCancel(context.Background())
 	defer cancelRoot()
 
-	// In in-memory store mode, start embedded scheduler so checks execute
-	// against the same in-memory store without requiring a separate process or external DB.
-	if cfg.StoreType == "memory" {
+	// Start embedded scheduler so checks execute against the store
+	if os.Getenv("DISABLE_EMBEDDED_WORKER") != "true" {
 		chk := checker.NewChecker()
 		sched := scheduler.New(st, chk,
 			scheduler.WithWorkers(cfg.WorkerConcurrency),
 			scheduler.WithTickInterval(time.Duration(cfg.CheckIntervalSec)*time.Second),
 			scheduler.WithStateMachine(stateMachine),
 		)
-		slog.Info("in-memory mode: starting embedded scheduler worker pool",
+		slog.Info("starting embedded scheduler worker pool",
 			"workers", cfg.WorkerConcurrency,
 			"interval_sec", cfg.CheckIntervalSec,
 		)
