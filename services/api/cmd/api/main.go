@@ -13,11 +13,13 @@ import (
 
 	"pulse/internal/alerts"
 	"pulse/internal/auth"
+	"pulse/internal/checker"
 	"pulse/internal/config"
 	"pulse/internal/heartbeat"
 	"pulse/internal/httpx"
 	"pulse/internal/incidents"
 	"pulse/internal/monitors"
+	"pulse/internal/scheduler"
 	"pulse/internal/statuspage"
 	"pulse/internal/store"
 )
@@ -55,6 +57,25 @@ func main() {
 	monitorsHandler := monitors.NewHandler(st)
 	heartbeatHandler := heartbeat.NewHandler(st, stateMachine)
 	statusPageHandler := statuspage.NewHandler(st)
+
+	rootCtx, cancelRoot := context.WithCancel(context.Background())
+	defer cancelRoot()
+
+	// In in-memory store mode, start embedded scheduler so checks execute
+	// against the same in-memory store without requiring a separate process or external DB.
+	if cfg.StoreType == "memory" {
+		chk := checker.NewChecker()
+		sched := scheduler.New(st, chk,
+			scheduler.WithWorkers(cfg.WorkerConcurrency),
+			scheduler.WithTickInterval(time.Duration(cfg.CheckIntervalSec)*time.Second),
+			scheduler.WithStateMachine(stateMachine),
+		)
+		slog.Info("in-memory mode: starting embedded scheduler worker pool",
+			"workers", cfg.WorkerConcurrency,
+			"interval_sec", cfg.CheckIntervalSec,
+		)
+		go sched.Start(rootCtx)
+	}
 
 	mux := http.NewServeMux()
 
