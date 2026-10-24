@@ -112,6 +112,7 @@ type Rollup struct {
 
 type RollupPoint struct {
 	Timestamp         time.Time `json:"timestamp"`
+	Hour              string    `json:"hour"`
 	HourLabel         string    `json:"hourLabel"`
 	Checks            int       `json:"checks"`
 	Failures          int       `json:"failures"`
@@ -122,6 +123,10 @@ type RollupPoint struct {
 	AvgConnectMs      int64     `json:"avgConnectMs"`
 	AvgTLSHandshakeMs int64     `json:"avgTlsMs"`
 	AvgTTFBMs         int64     `json:"avgTtfbMs"`
+	DNSMs             int64     `json:"dnsMs"`
+	ConnectMs         int64     `json:"connectMs"`
+	TLSHandshakeMs    int64     `json:"tlsMs"`
+	TTFBMs            int64     `json:"ttfbMs"`
 }
 
 type MonitorStats struct {

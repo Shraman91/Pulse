@@ -95,15 +95,23 @@ export interface Incident {
 }
 
 export interface RollupPoint {
-  hour: string;
+  hour?: string;
+  hourLabel?: string;
+  timestamp?: string;
   checks: number;
   failures: number;
+  uptimePct?: number;
   avgLatencyMs: number;
-  peakLatencyMs: number;
-  dnsMs: number;
-  connectMs: number;
-  tlsMs: number;
-  ttfbMs: number;
+  peakLatencyMs?: number;
+  maxLatencyMs?: number;
+  dnsMs?: number;
+  avgDnsMs?: number;
+  connectMs?: number;
+  avgConnectMs?: number;
+  tlsMs?: number;
+  avgTlsMs?: number;
+  ttfbMs?: number;
+  avgTtfbMs?: number;
 }
 
 export interface MonitorStats {

@@ -62,7 +62,9 @@ export function MonitorStatsModal({ monitor, token, onClose }: MonitorStatsModal
   }, [fetchStats]);
 
   // Format hour label for charts & bars
-  const formatHourLabel = (hourStr: string) => {
+  const formatHourLabel = (hourStr?: string, fallbackLabel?: string) => {
+    if (fallbackLabel) return fallbackLabel;
+    if (!hourStr) return "00:00";
     // Format is "2006-01-02-15"
     const parts = hourStr.split("-");
     if (parts.length >= 4) {
@@ -74,18 +76,18 @@ export function MonitorStatsModal({ monitor, token, onClose }: MonitorStatsModal
       }
       return `${month}/${day} ${hour}:00`;
     }
-    return hourStr;
+    return hourStr.length >= 16 ? hourStr.slice(11, 16) : hourStr;
   };
 
   const chartData = stats?.points?.map((p) => ({
-    rawHour: p.hour,
-    displayHour: formatHourLabel(p.hour),
-    dns: p.dnsMs,
-    connect: p.connectMs,
-    tls: p.tlsMs,
-    ttfb: p.ttfbMs,
+    rawHour: p.hour || p.hourLabel || "",
+    displayHour: formatHourLabel(p.hour, p.hourLabel),
+    dns: p.dnsMs ?? p.avgDnsMs ?? 0,
+    connect: p.connectMs ?? p.avgConnectMs ?? 0,
+    tls: p.tlsMs ?? p.avgTlsMs ?? 0,
+    ttfb: p.ttfbMs ?? p.avgTtfbMs ?? 0,
     totalLatency: p.avgLatencyMs,
-    peakLatency: p.peakLatencyMs,
+    peakLatency: p.peakLatencyMs ?? p.maxLatencyMs ?? p.avgLatencyMs,
     checks: p.checks,
     failures: p.failures,
     uptimePct: p.checks > 0 ? ((p.checks - p.failures) / p.checks) * 100 : 100,

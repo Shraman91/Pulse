@@ -103,6 +103,7 @@ func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 
 		points[i] = store.RollupPoint{
 			Timestamp:         r.Hour,
+			Hour:              r.Hour.Format(time.RFC3339),
 			HourLabel:         hourLabel,
 			Checks:            r.Checks,
 			Failures:          r.Failures,
@@ -113,6 +114,10 @@ func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 			AvgConnectMs:      avgConnect,
 			AvgTLSHandshakeMs: avgTLS,
 			AvgTTFBMs:         avgTTFB,
+			DNSMs:             avgDNS,
+			ConnectMs:         avgConnect,
+			TLSHandshakeMs:    avgTLS,
+			TTFBMs:            avgTTFB,
 		}
 	}
 

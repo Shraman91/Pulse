@@ -166,15 +166,25 @@ function MonitorDetailContent() {
   };
 
   // Latency chart formatting
-  const chartData = (stats?.points || []).map((pt) => ({
-    hour: pt.hour.slice(11, 16),
-    dns: pt.dnsMs,
-    connect: pt.connectMs,
-    tls: pt.tlsMs,
-    ttfb: pt.ttfbMs,
-    total: pt.avgLatencyMs,
-    failures: pt.failures,
-  }));
+  const chartData = (stats?.points || []).map((pt) => {
+    let hour = pt.hourLabel || "";
+    if (!hour && pt.hour && typeof pt.hour === "string") {
+      hour = pt.hour.length >= 16 ? pt.hour.slice(11, 16) : pt.hour;
+    }
+    if (!hour && pt.timestamp) {
+      const t = String(pt.timestamp);
+      hour = t.length >= 16 ? t.slice(11, 16) : t;
+    }
+    return {
+      hour: hour || "00:00",
+      dns: pt.dnsMs ?? pt.avgDnsMs ?? 0,
+      connect: pt.connectMs ?? pt.avgConnectMs ?? 0,
+      tls: pt.tlsMs ?? pt.avgTlsMs ?? 0,
+      ttfb: pt.ttfbMs ?? pt.avgTtfbMs ?? 0,
+      total: pt.avgLatencyMs ?? 0,
+      failures: pt.failures ?? 0,
+    };
+  });
 
   if (authLoading || (loading && !monitor)) {
     return (
